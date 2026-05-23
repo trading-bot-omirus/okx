@@ -31,6 +31,11 @@ def get_exchange():
 def fetch_ohlcv(symbol: str, timeframe=TIMEFRAME, limit=LOOKBACK_BARS) -> pd.DataFrame:
     ex  = get_exchange()
     sym = _to_okx_symbol(symbol)
+    try:
+        ex.load_markets()
+    except TypeError:
+        log.warning("load_markets() failed — some OKX testnet markets have null base")
+        ex.markets = {}
     raw = ex.fetch_ohlcv(sym, timeframe, limit=limit)
     df  = pd.DataFrame(raw, columns=['timestamp','open','high','low','close','volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
