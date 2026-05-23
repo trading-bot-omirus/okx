@@ -116,6 +116,30 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 
 <!-- OVERVIEW -->
 <div class="tab active" id="tab-overview">
+  <!-- Balance Row -->
+  <div class="grid-4" style="margin-bottom:10px">
+    <div class="card" style="border-color:#6c63ff55">
+      <div class="card-title">📄 Paper Balance</div>
+      <div class="stat-value" id="kpaper" style="color:#6c63ff">—</div>
+      <div class="stat-sub">Simulation κεφάλαιο</div>
+    </div>
+    <div class="card" style="border-color:#00d08455">
+      <div class="card-title">💰 Real OKX Balance</div>
+      <div class="stat-value green" id="kreal">—</div>
+      <div class="stat-sub">Πραγματικό USDT</div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚡ Mode</div>
+      <div class="stat-value" id="kmode">—</div>
+      <div class="stat-sub">Paper / Live</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 Open Positions</div>
+      <div class="stat-value" id="kopenpos">—</div>
+      <div class="stat-sub">από max <span id="kmaxpos">3</span></div>
+    </div>
+  </div>
+  <!-- PnL Row -->
   <div class="grid-4">
     <div class="card"><div class="card-title">Total PnL</div><div class="stat-value" id="kpnl">—</div><div class="stat-sub">USDT realized</div></div>
     <div class="card"><div class="card-title">Total Trades</div><div class="stat-value" id="ktrades">—</div><div class="stat-sub" id="kwr">Win Rate: —</div></div>
@@ -391,6 +415,14 @@ async function loadStats(){
   document.getElementById('kbest').textContent=(s.best_trade||0)+' USDT';
   document.getElementById('kworst').textContent=(s.worst_trade||0)+' USDT';
   doC.data.datasets[0].data=[s.wins||0,s.losses||0];doC.update();
+  // Load balance
+  const b=await api('/api/balance');
+  if(b){
+    document.getElementById('kpaper').textContent='$'+b.paper_balance+' USDT';
+    document.getElementById('kreal').textContent=b.real_balance?'$'+b.real_balance+' USDT':'—';
+    document.getElementById('kmode').textContent=b.paper_trading?'📄 Paper':'🔴 LIVE';
+    document.getElementById('kmode').className='stat-value '+(b.paper_trading?'':'red');
+  }
 }
 
 // ── Trades ────────────────────────────────────────────────────────────────────
