@@ -110,7 +110,7 @@ def process_symbol(symbol: str, df_btc=None):
         if ml_s != 0 and ml_c > 0 and ml_c < _min_ml_confidence:
             log.info(f"{symbol}: low ml_conf {ml_c:.2f} — skip")
             return
-        if ctx['vol_ratio'] < 0.3:
+        if ctx['vol_ratio'] < 0.3 and not _cfg.get('TESTNET', False):
             log.info(f"{symbol}: low volume ratio {ctx['vol_ratio']:.2f} — skip")
             return
 
