@@ -170,15 +170,6 @@ def available_pairs():
             'note': f'Offline — {str(e)[:60]}'
         })
 
-if __name__ == '__main__':
-    import os
-    os.makedirs('logs', exist_ok=True)
-    os.makedirs('data', exist_ok=True)
-    os.makedirs('models', exist_ok=True)
-    init_db()
-    port = int(os.getenv('PORT', API_PORT))   # Railway δίνει PORT env var
-    app.run(host=API_HOST, port=port, debug=False)
-
 # ── Balance ───────────────────────────────────────────────────────────────────
 @app.route('/api/balance')
 @auth
@@ -200,7 +191,6 @@ def get_balance():
         except Exception as e:
             result['real_balance_error'] = str(e)
     else:
-        # Paper mode — δείξε και το real αν έχει keys
         try:
             from data_feed import fetch_balance
             bal = fetch_balance()
@@ -209,3 +199,12 @@ def get_balance():
         except:
             result['real_balance'] = None
     return jsonify(result)
+
+if __name__ == '__main__':
+    import os
+    os.makedirs('logs', exist_ok=True)
+    os.makedirs('data', exist_ok=True)
+    os.makedirs('models', exist_ok=True)
+    init_db()
+    port = int(os.getenv('PORT', API_PORT))
+    app.run(host=API_HOST, port=port, debug=False)
