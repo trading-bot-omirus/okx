@@ -170,6 +170,30 @@ def available_pairs():
             'note': f'Offline — {str(e)[:60]}'
         })
 
+# ── Manual Test Trade ──────────────────────────────────────────────────────────
+@app.route('/api/trade/manual', methods=['POST'])
+@auth
+def manual_trade():
+    from executor import EX
+    from risk_manager import RISK
+    from data_feed import get_mark_price, fetch_balance
+    from database import get_config
+    data = request.get_json() or {}
+    symbol = data.get('symbol', 'BTC/USDT')
+    side   = int(data.get('side', 1))  # 1=LONG, -1=SHORT
+    try:
+        entry = get_mark_price(symbol)
+        qty   = data.get('qty', 0.001)
+        sl    = data.get('sl', round(entry * 0.98, 2))
+        tp    = data.get('tp', round(entry * 1.03, 2))
+        trade_id = EX.open_position(symbol, side, float(qty), entry, sl, tp,
+                                    'manual', {'manual': True})
+        if trade_id:
+            return jsonify({'message': f"{'LONG' if side==1 else 'SHORT'} {symbol} opened!", 'trade_id': trade_id, 'entry': entry})
+        return jsonify({'error': 'Failed to open trade'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ── Balance ───────────────────────────────────────────────────────────────────
 @app.route('/api/balance')
 @auth
