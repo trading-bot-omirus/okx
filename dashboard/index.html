@@ -502,12 +502,13 @@ async function startBot(){await api('/api/bot/start',{method:'POST'});checkStatu
 async function stopBot(){await api('/api/bot/stop',{method:'POST'});checkStatus();}
 async function manualBuy(){
   const sym=prompt('Symbol:','BTC/USDT')||'BTC/USDT';
-  const qty=parseFloat(prompt('Quantity (0.001 for BTC, 1 for XRP/SOL, 10 for DOGE):','1'))||1;
+  const usd=parseFloat(prompt('$ USDT to invest:','50'))||50;
+  const lev=parseInt(prompt('Leverage (2x-10x):','8'))||8;
   const r=await api('/api/trade/manual',{
     method:'POST',headers:{...H,'Content-Type':'application/json'},
-    body:JSON.stringify({symbol:sym,side:1,qty})
+    body:JSON.stringify({symbol:sym,side:1,usd,leverage:lev})
   });
-  if(r.trade_id) alert(`✅ ${sym} LONG opened! Entry: ${r.entry}`);
+  if(r.trade_id) alert(`✅ ${sym} LONG ${lev}x | Entry: $${r.entry} | Qty: ${r.qty}`);
   else alert(`❌ ${r.error||'Failed'}`);
   loadAll();
 }

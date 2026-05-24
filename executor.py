@@ -37,25 +37,26 @@ class Executor:
         )
         return round(INITIAL_BALANCE + total_pnl - open_margin, 2)
 
-    def open_position(self, symbol, side_int, qty, entry, sl, tp, strategy, signals):
+    def open_position(self, symbol, side_int, qty, entry, sl, tp, strategy, signals, leverage=None):
         side_str = "LONG" if side_int == 1 else "SHORT"
+        lev = leverage or _lev()
         try:
             if not _is_paper():
                 ex     = get_exchange()
                 sym    = _to_okx_symbol(symbol)
-                ex.set_leverage(_lev(), sym, params={'mgnMode': _margin_type(), 'posSide': 'net'})
+                ex.set_leverage(lev, sym, params={'mgnMode': _margin_type(), 'posSide': 'net'})
                 order_side = "buy" if side_int == 1 else "sell"
                 ex.create_market_order(sym, order_side, qty, params={
                     'tdMode': _margin_type(), 'posSide': 'long' if side_int == 1 else 'short',
                 })
                 log.info(f"[LIVE OKX] Opened {side_str} {symbol} qty={qty}")
             else:
-                log.info(f"[PAPER] Opened {side_str} {symbol} qty={qty} @ {entry}")
+                log.info(f"[PAPER] Opened {side_str} {symbol} qty={qty} @ {entry} lev={lev}x")
                 self.paper_balance = self._calc_balance()
 
             trade_id = open_trade(
                 symbol=symbol, side=side_str, entry=entry, qty=qty,
-                leverage=_lev(), sl=sl, tp=tp,
+                leverage=lev, sl=sl, tp=tp,
                 strategy=strategy, signals=signals, paper=_is_paper()
             )
             return trade_id
