@@ -4,21 +4,27 @@ OKX perpetual swaps: tdMode=isolated, posSide=long/short
 """
 import logging
 from config import PAPER_TRADING, LEVERAGE, MARGIN_TYPE
-from database import open_trade, close_trade, get_open_trades, get_config, set_config
+from database import open_trade, close_trade, get_open_trades, get_all_trades
 from data_feed import get_exchange, get_mark_price, _to_okx_symbol
 
 log = logging.getLogger(__name__)
 
+INITIAL_BALANCE = 1000.0
+
 class Executor:
     def __init__(self):
-        self._load_balance()
+        self.paper_balance = self._calc_balance()
 
-    def _load_balance(self):
-        raw = get_config('paper_balance', '1000.0')
-        self.paper_balance = float(raw)
-
-    def _save_balance(self):
-        set_config('paper_balance', str(round(self.paper_balance, 2)))
+    def _calc_balance(self):
+        total_pnl = sum(
+            (t.get('pnl_usdt') or 0) for t in get_all_trades(9999)
+            if t.get('status') != 'OPEN'
+        )
+        open_margin = sum(
+            (t['qty'] * (t.get('entry_price') or 0)) / LEVERAGE
+            for t in get_open_trades()
+        )
+        return round(INITIAL_BALANCE + total_pnl - open_margin, 2)
 
     def _set_leverage(self, ex, symbol: str):
         """Ορίζει leverage & margin mode στο OKX"""
@@ -49,10 +55,8 @@ class Executor:
                 ex.create_market_order(sym, order_side, qty, params=params)
                 log.info(f"[LIVE OKX] Opened {side_str} {symbol} qty={qty}")
             else:
-                margin = (qty * entry) / LEVERAGE
-                self.paper_balance -= margin
-                self._save_balance()
-                log.info(f"[PAPER] Opened {side_str} {symbol} qty={qty} @ {entry} margin={margin:.2f} balance={self.paper_balance:.2f}")
+                log.info(f"[PAPER] Opened {side_str} {symbol} qty={qty} @ {entry}")
+                self.paper_balance = self._calc_balance()
 
             trade_id = open_trade(
                 symbol=symbol, side=side_str, entry=entry, qty=qty,
@@ -84,10 +88,8 @@ class Executor:
                 log.info(f"[LIVE OKX] Closed {trade_id} {symbol} reason={reason} PnL={pnl_usdt:.2f}")
             else:
                 entry_price = trade.get('entry_price', 0)
-                margin = (qty * entry_price) / LEVERAGE if entry_price else 0
-                self.paper_balance += margin + pnl_usdt
-                self._save_balance()
-                log.info(f"[PAPER] Closed {trade_id} {symbol} reason={reason} PnL={pnl_usdt:.2f} margin={margin:.2f} balance={self.paper_balance:.2f}")
+                log.info(f"[PAPER] Closed {trade_id} {symbol} reason={reason} PnL={pnl_usdt:.2f}")
+                self.paper_balance = self._calc_balance()
 
             close_trade(trade_id, exit_price, pnl_pct, pnl_usdt,
                         status=reason if reason in ("TAKE_PROFIT","STOP_LOSS") else "CLOSED")

@@ -226,11 +226,14 @@ def manual_trade():
 @app.route('/api/balance')
 @auth
 def get_balance():
-    from config import PAPER_TRADING
-    from executor import EX
+    from config import PAPER_TRADING, LEVERAGE
+    from database import get_all_trades, get_open_trades
+    total_pnl = sum((t.get('pnl_usdt') or 0) for t in get_all_trades(9999) if t.get('status') != 'OPEN')
+    open_margin = sum((t['qty'] * (t.get('entry_price') or 0)) / LEVERAGE for t in get_open_trades())
+    paper_balance = round(1000.0 + total_pnl - open_margin, 2)
     result = {
-        'paper_trading':  PAPER_TRADING,
-        'paper_balance':  round(EX.paper_balance, 2),
+        'paper_trading':  True,
+        'paper_balance':  paper_balance,
         'real_balance':   None,
         'currency':       'USDT',
     }
@@ -256,11 +259,13 @@ def get_balance():
 @app.route('/api/balance/reset', methods=['POST'])
 @auth
 def reset_balance():
-    from database import set_config
-    set_config('paper_balance', '1000.0')
-    from executor import EX
-    EX._load_balance()
-    return jsonify({'message': 'Balance reset to $1,000', 'paper_balance': 1000.0})
+    from database import set_config, get_conn
+    conn = get_conn()
+    conn.execute("DELETE FROM trades")
+    conn.execute("DELETE FROM signals")
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'All trades cleared. Balance reset to $1,000', 'paper_balance': 1000.0})
 
 if __name__ == '__main__':
     import os
