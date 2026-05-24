@@ -81,6 +81,10 @@ This file tells a new AI assistant everything it needs to know to continue worki
 21. **Live config reads** (`main.py`, `config.py`): Πριν τα `MIN_AGREEMENT`, `MIN_ML_CONFIDENCE`, `TIMEFRAME` ήταν frozen imports που διαβάζονταν ΜΙΑ φορά στο startup. Τώρα κάθε `process_symbol()` διαβάζει live το config από τη DB.
 22. **Thresholds lowered** (`config.py`): `MIN_AGREEMENT` από 60% → 50%, `MIN_ML_CONFIDENCE` από 62% → 50%.
 
+### Phase 7: Executor Fixes (Claude analysis)
+23. **Bug fix — balance calc leverage** (`executor.py:35`): `_calc_balance()` χρησιμοποιούσε `_lev()` (τρέχον leverage από settings) αντί για το leverage του κάθε trade. Αν άλλαζες leverage στο dashboard, το balance υπολογιζόταν λάθος. Διορθώθηκε σε `t.get('leverage', _lev())`.
+24. **Bug fix — safe init** (`executor.py:90`): `EX = Executor()` έτρεχε `_calc_balance()` στο import. Αν η DB δεν ήταν έτοιμη, κρασάρε. Τώρα wrapped σε try/except με fallback balance $1,000.
+
 ---
 
 ## Current state
