@@ -252,6 +252,16 @@ def get_balance():
             result['real_balance'] = None
     return jsonify(result)
 
+# ── Reset Balance ──────────────────────────────────────────────────────────────
+@app.route('/api/balance/reset', methods=['POST'])
+@auth
+def reset_balance():
+    from database import set_config
+    set_config('paper_balance', '1000.0')
+    from executor import EX
+    EX._load_balance()
+    return jsonify({'message': 'Balance reset to $1,000', 'paper_balance': 1000.0})
+
 if __name__ == '__main__':
     import os
     os.makedirs('logs', exist_ok=True)
