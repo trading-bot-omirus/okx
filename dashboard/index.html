@@ -458,8 +458,8 @@ async function loadPositions(){
   if(!pos.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">No open positions</td></tr>';return;}
   tb.innerHTML=pos.map(p=>{
     const s=p.side==='LONG'?'<span class="badge bl">LONG</span>':'<span class="badge bs">SHORT</span>';
-    const pnl=p.pnl_usdt||0;const pct=p.pnl_pct||0;
-    const cls=pnl>=0?'green':'red';
+    const pct=p.pnl_pct||0;
+    const cls=pct>=0?'green':'red';
     return`<tr><td>${p.symbol}</td><td>${s}</td>
     <td>$${(p.entry_price||0).toFixed(2)}</td>
     <td>$${(p.position||0).toFixed(2)}</td>
@@ -687,10 +687,8 @@ async function loadPositionsFast(){
   const old=tb.innerHTML;
   tb.innerHTML=pos.map(p=>{
     const s=p.side==='LONG'?'<span class="badge bl">LONG</span>':'<span class="badge bs">SHORT</span>';
-    const pnl=p.pnl_usdt||0;
     const pct=p.pnl_pct||0;
-    const cls=pnl>=0?'green':'red';
-    const fmt=(v)=>Math.abs(v)<0.01?v.toFixed(4):v.toFixed(2);
+    const cls=pct>=0?'green':'red';
     return`<tr><td>${p.symbol}</td><td>${s}</td>
     <td class="v">$${(p.entry_price||0).toFixed(2)}</td>
     <td class="v">$${(p.position||0).toFixed(2)}</td>
