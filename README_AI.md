@@ -93,6 +93,9 @@ This file tells a new AI assistant everything it needs to know to continue worki
 27. **Filter null-base markets** (`data_feed.py`): Το OKX testnet επιστρέφει markets με `base: null`. Πριν ο κώδικας έκανε `ex.markets = {}` (κενό) → `fetch_ohlcv` αποτύγχανε με BadSymbol. Τώρα φιλτράρει: `{k:v for k,v in markets.items() if v.get('base')}`.
 28. **Safe fetch_ohlcv** (`data_feed.py`): `fetch_ohlcv()` δεν είχε try/except — αν απέτυχε, το exception σιωπούσε στο process_symbol. Τώρα έχει try/except και επιστρέφει `None`.
 
+### Phase 10: Duplicate Symbol Fix
+29. **Skip duplicate open position** (`main.py`): Πριν το bot άνοιγε πολλαπλές θέσεις στο ίδιο symbol (π.χ. 2 φορές ATOM/LONG). Τώρα ελέγχει αν υπάρχει ήδη ανοιχτή θέση στο ίδιο symbol πριν ανοίξει νέα.
+
 ---
 
 ## Current state
