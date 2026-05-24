@@ -88,6 +88,11 @@ This file tells a new AI assistant everything it needs to know to continue worki
 ### Phase 8: Meta-Learner Fix (Claude analysis)
 25. **Bug fix — meta_learner agreement** (`meta_learner.py`): Το `_rule_based()` fallback είχε ακόμα την παλιά `abs(mean())` λογική. Επίσης το `build_features()` είχε το ίδιο. Και τα δύο διορθώθηκαν σε longs/shorts count. Επίσης τα thresholds διαβάζονται live από DB (όχι frozen imports).
 
+### Phase 9: Data Feed Fix — The Real Culprit (Claude analysis)
+26. **Singleton exchange** (`data_feed.py`): `get_exchange()` δημιουργούσε νέο CCXT object σε κάθε κλήση → `load_markets()` δεκάδες φορές ανά cycle. Τώρα cached (global `_exchange`), `load_markets()` τρέχει μόνο μία φορά.
+27. **Filter null-base markets** (`data_feed.py`): Το OKX testnet επιστρέφει markets με `base: null`. Πριν ο κώδικας έκανε `ex.markets = {}` (κενό) → `fetch_ohlcv` αποτύγχανε με BadSymbol. Τώρα φιλτράρει: `{k:v for k,v in markets.items() if v.get('base')}`.
+28. **Safe fetch_ohlcv** (`data_feed.py`): `fetch_ohlcv()` δεν είχε try/except — αν απέτυχε, το exception σιωπούσε στο process_symbol. Τώρα έχει try/except και επιστρέφει `None`.
+
 ---
 
 ## Current state
