@@ -6,7 +6,7 @@ import numpy as np, pandas as pd, joblib, logging, os
 from datetime import datetime
 import xgboost as xgb
 from sklearn.preprocessing import LabelEncoder
-from config import MODEL_PATH, MIN_AGREEMENT, MIN_ML_CONFIDENCE
+from config import MODEL_PATH
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +45,13 @@ class MetaLearner:
         arb_s, arb_c   = signals.get('arb',       (0,0))
 
         raw = [mom_s, mr_s, ml_s, arb_s]
-        agreement = abs(np.mean([x for x in raw if x != 0]) if any(x!=0 for x in raw) else 0)
+        non_zero = [x for x in raw if x != 0]
+        if non_zero:
+            longs  = sum(1 for x in non_zero if x > 0)
+            shorts = sum(1 for x in non_zero if x < 0)
+            agreement = max(longs, shorts) / len(non_zero)
+        else:
+            agreement = 0.0
         votes_up  = sum(1 for x in raw if x > 0)
         votes_dn  = sum(1 for x in raw if x < 0)
 
@@ -82,14 +88,20 @@ class MetaLearner:
 
     def _rule_based(self, signals, ctx) -> tuple[int, float]:
         """Fallback όταν δεν υπάρχει trained model"""
+        from config import get_live_config
+        _cfg = get_live_config()
+        _min_agreement     = _cfg['MIN_AGREEMENT']
+        _min_ml_confidence = _cfg['MIN_ML_CONFIDENCE']
+
         vals = [s[0] for s in signals.values() if s[0] != 0]
         if not vals: return 0, 0.0
-        mean_sig = np.mean(vals)
-        agree    = abs(mean_sig)
-        if agree < MIN_AGREEMENT: return 0, agree
+        longs  = sum(1 for x in vals if x > 0)
+        shorts = sum(1 for x in vals if x < 0)
+        agree  = max(longs, shorts) / len(vals)
+        if agree < _min_agreement: return 0, agree
         ml_conf = signals.get('ml',(0,0))[1]
-        if ml_conf > 0 and ml_conf < MIN_ML_CONFIDENCE: return 0, ml_conf
-        return (1 if mean_sig > 0 else -1), agree
+        if ml_conf > 0 and ml_conf < _min_ml_confidence: return 0, ml_conf
+        return (1 if longs > shorts else -1), agree
 
     def train_from_db(self):
         """Walk-forward training από ιστορικά trades στη DB"""
