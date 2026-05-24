@@ -463,7 +463,7 @@ async function loadPositions(){
     return`<tr><td>${p.symbol}</td><td>${s}</td>
     <td>$${(p.entry_price||0).toFixed(2)}</td>
     <td>$${(p.position||0).toFixed(2)}</td>
-    <td class="${cls}">${pnl>=0?'+':''}${pnl.toFixed(2)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</td>
+    <td class="${cls}">${pct>=0?'+':''}${pct.toFixed(2)}%</td>
     <td>${p.strategy||'—'}</td>
     <td>${p.leverage_display||'2x'}</td>
     <td><button class="btn btn-stop" style="padding:2px 8px;font-size:.65rem" onclick="closeTrade(${p.id})">✕</button></td></tr>`;
@@ -694,7 +694,7 @@ async function loadPositionsFast(){
     return`<tr><td>${p.symbol}</td><td>${s}</td>
     <td class="v">$${(p.entry_price||0).toFixed(2)}</td>
     <td class="v">$${(p.position||0).toFixed(2)}</td>
-    <td class="${cls} v">${pnl>=0?'+':''}${fmt(pnl)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</td>
+    <td class="${cls} v">${pct>=0?'+':''}${pct.toFixed(2)}%</td>
     <td class="v">${p.strategy||'—'}</td>
     <td class="v">${p.leverage_display||'2x'}</td>
     <td><button class="btn btn-stop" style="padding:2px 8px;font-size:.65rem" onclick="closeTrade(${p.id})">✕</button></td></tr>`;
