@@ -114,6 +114,12 @@ def process_symbol(symbol: str, df_btc=None):
             log.info(f"{symbol}: low volume ratio {ctx['vol_ratio']:.2f} — skip")
             return
 
+        # Μην ανοίγεις δεύτερη θέση στο ίδιο symbol
+        open_syms = [t['symbol'] for t in get_open_trades()]
+        if symbol in open_syms:
+            log.info(f"{symbol}: already open — skip")
+            return
+
         save_signal(symbol, mom_s, mr_s, ml_s, arb_s, agreement, final_signal,
                     "trending" if ctx['adx'] > 25 else "ranging")
 
