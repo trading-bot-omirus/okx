@@ -32,7 +32,7 @@ class Executor:
             if t.get('status') != 'OPEN'
         )
         open_margin = sum(
-            (t['qty'] * (t.get('entry_price') or 0)) / _lev()
+            (t['qty'] * (t.get('entry_price') or 0)) / t.get('leverage', _lev())
             for t in get_open_trades()
         )
         return round(INITIAL_BALANCE + total_pnl - open_margin, 2)
@@ -87,4 +87,9 @@ class Executor:
         except Exception as e:
             log.error(f"close_position error: {e}")
 
-EX = Executor()
+try:
+    EX = Executor()
+except Exception as e:
+    log.warning(f"Executor init failed: {e}")
+    EX = Executor.__new__(Executor)
+    EX.paper_balance = INITIAL_BALANCE
