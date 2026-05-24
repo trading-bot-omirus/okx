@@ -59,9 +59,10 @@ def positions():
         pnl_pct = side * (price - entry) / entry * LEVERAGE
         pnl_usdt = margin * pnl_pct
         t['current_price'] = round(price, 2)
-        t['margin'] = round(margin, 2)
+        t['position'] = round(margin, 2)
         t['pnl_pct'] = round(pnl_pct * 100, 2)
         t['pnl_usdt'] = round(pnl_usdt, 2)
+        t['leverage_display'] = f"{t.get('leverage', LEVERAGE)}x"
         result.append(t)
     return jsonify(result)
 
