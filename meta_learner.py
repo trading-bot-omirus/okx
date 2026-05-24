@@ -99,8 +99,8 @@ class MetaLearner:
         shorts = sum(1 for x in vals if x < 0)
         agree  = max(longs, shorts) / len(vals)
         if agree < _min_agreement: return 0, agree
-        ml_conf = signals.get('ml',(0,0))[1]
-        if ml_conf > 0 and ml_conf < _min_ml_confidence: return 0, ml_conf
+        ml_s, ml_c = signals.get('ml', (0, 0))
+        if ml_s != 0 and ml_c > 0 and ml_c < _min_ml_confidence: return 0, ml_c
         return (1 if longs > shorts else -1), agree
 
     def train_from_db(self):

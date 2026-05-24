@@ -107,7 +107,7 @@ def process_symbol(symbol: str, df_btc=None):
         if agreement < _min_agreement:
             log.info(f"{symbol}: low agreement {agreement:.2f} — skip")
             return
-        if ml_c > 0 and ml_c < _min_ml_confidence:
+        if ml_s != 0 and ml_c > 0 and ml_c < _min_ml_confidence:
             log.info(f"{symbol}: low ml_conf {ml_c:.2f} — skip")
             return
         if ctx['vol_ratio'] < 0.3:
