@@ -85,6 +85,9 @@ This file tells a new AI assistant everything it needs to know to continue worki
 23. **Bug fix — balance calc leverage** (`executor.py:35`): `_calc_balance()` χρησιμοποιούσε `_lev()` (τρέχον leverage από settings) αντί για το leverage του κάθε trade. Αν άλλαζες leverage στο dashboard, το balance υπολογιζόταν λάθος. Διορθώθηκε σε `t.get('leverage', _lev())`.
 24. **Bug fix — safe init** (`executor.py:90`): `EX = Executor()` έτρεχε `_calc_balance()` στο import. Αν η DB δεν ήταν έτοιμη, κρασάρε. Τώρα wrapped σε try/except με fallback balance $1,000.
 
+### Phase 8: Meta-Learner Fix (Claude analysis)
+25. **Bug fix — meta_learner agreement** (`meta_learner.py`): Το `_rule_based()` fallback είχε ακόμα την παλιά `abs(mean())` λογική. Επίσης το `build_features()` είχε το ίδιο. Και τα δύο διορθώθηκαν σε longs/shorts count. Επίσης τα thresholds διαβάζονται live από DB (όχι frozen imports).
+
 ---
 
 ## Current state
