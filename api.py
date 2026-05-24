@@ -250,7 +250,7 @@ def get_balance():
     from config import PAPER_TRADING, LEVERAGE
     from database import get_all_trades, get_open_trades
     total_pnl = sum((t.get('pnl_usdt') or 0) for t in get_all_trades(9999) if t.get('status') != 'OPEN')
-    open_margin = sum((t['qty'] * (t.get('entry_price') or 0)) / LEVERAGE for t in get_open_trades())
+    open_margin = sum((t['qty'] * (t.get('entry_price') or 0)) / (t.get('leverage') or 2) for t in get_open_trades())
     paper_balance = round(1000.0 + total_pnl - open_margin, 2)
     result = {
         'paper_trading':  True,
