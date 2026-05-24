@@ -42,7 +42,9 @@ class Executor:
                 ex.create_market_order(sym, order_side, qty, params=params)
                 log.info(f"[LIVE OKX] Opened {side_str} {symbol} qty={qty}")
             else:
-                log.info(f"[PAPER] Opened {side_str} {symbol} qty={qty} @ {entry}")
+                margin = (qty * entry) / LEVERAGE
+                self.paper_balance -= margin
+                log.info(f"[PAPER] Opened {side_str} {symbol} qty={qty} @ {entry} margin={margin:.2f} balance={self.paper_balance:.2f}")
 
             trade_id = open_trade(
                 symbol=symbol, side=side_str, entry=entry, qty=qty,
@@ -73,8 +75,10 @@ class Executor:
                 ex.create_market_order(sym, close_side, qty, params=params)
                 log.info(f"[LIVE OKX] Closed {trade_id} {symbol} reason={reason} PnL={pnl_usdt:.2f}")
             else:
-                log.info(f"[PAPER] Closed {trade_id} {symbol} reason={reason} PnL={pnl_usdt:.2f} ({pnl_pct*100:.2f}%)")
-                self.paper_balance += pnl_usdt
+                entry_price = trade.get('entry_price', 0)
+                margin = (qty * entry_price) / LEVERAGE if entry_price else 0
+                self.paper_balance += margin + pnl_usdt
+                log.info(f"[PAPER] Closed {trade_id} {symbol} reason={reason} PnL={pnl_usdt:.2f} margin={margin:.2f} balance={self.paper_balance:.2f}")
 
             close_trade(trade_id, exit_price, pnl_pct, pnl_usdt,
                         status=reason if reason in ("TAKE_PROFIT","STOP_LOSS") else "CLOSED")
