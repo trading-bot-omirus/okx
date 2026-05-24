@@ -76,6 +76,11 @@ This file tells a new AI assistant everything it needs to know to continue worki
 18. Deleted `trading_bot_BALANCE` folder (old copy of code)
 19. Created this `README_AI.md`
 
+### Phase 6: Bug Fixes — Automated Trading (Claude analysis)
+20. **agreement logic fix** (`main.py`): Πριν χρησιμοποιούσε `abs(mean(signals))` — λάθος. Π.χ. 3 LONG + 1 SHORT = mean 0.5 → agreement 50% → SKIP. Τώρα μετράει longs vs shorts: 3 LONG + 1 SHORT = 75% agreement. Διορθώθηκε.
+21. **Live config reads** (`main.py`, `config.py`): Πριν τα `MIN_AGREEMENT`, `MIN_ML_CONFIDENCE`, `TIMEFRAME` ήταν frozen imports που διαβάζονταν ΜΙΑ φορά στο startup. Τώρα κάθε `process_symbol()` διαβάζει live το config από τη DB.
+22. **Thresholds lowered** (`config.py`): `MIN_AGREEMENT` από 60% → 50%, `MIN_ML_CONFIDENCE` από 62% → 50%.
+
 ---
 
 ## Current state
