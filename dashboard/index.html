@@ -158,8 +158,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
   </div>
   <div class="sec-t">Open Positions</div>
   <div class="tbl-card">
-    <table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>SL</th><th>TP</th><th>Qty</th><th>Opened</th><th>Strategy</th><th></th></tr></thead>
-    <tbody id="optable"><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">No open positions</td></tr></tbody></table>
+    <table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Price</th><th>Margin</th><th>PnL</th><th>SL</th><th>TP</th><th>Qty</th><th>Opened</th><th></th></tr></thead>
+    <tbody id="optable"><tr><td colspan="11" style="text-align:center;color:var(--muted);padding:16px">No open positions</td></tr></tbody></table>
   </div>
 </div>
 
@@ -453,11 +453,17 @@ async function loadPositions(){
   if(!pos.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">No open positions</td></tr>';return;}
   tb.innerHTML=pos.map(p=>{
     const s=p.side==='LONG'?'<span class="badge bl">LONG</span>':'<span class="badge bs">SHORT</span>';
+    const pnl=p.pnl_usdt||0;
+    const cls=pnl>=0?'green':'red';
     return`<tr><td>${p.symbol}</td><td>${s}</td>
     <td>${(p.entry_price||0).toFixed(2)}</td>
+    <td>${p.current_price||'—'}</td>
+    <td>${(p.margin||0).toFixed(2)}</td>
+    <td class="${cls}">${pnl>=0?'+':''}${pnl.toFixed(2)}</td>
     <td class="red">${(p.stop_loss||0).toFixed(2)}</td>
     <td class="green">${(p.take_profit||0).toFixed(2)}</td>
-    <td>${p.qty}</td>    <td>${(p.opened_at||'').slice(0,16)}</td><td>${p.strategy||'—'}</td>
+    <td>${p.qty}</td>
+    <td>${(p.opened_at||'').slice(0,16)}</td>
     <td><button class="btn btn-stop" style="padding:2px 8px;font-size:.65rem" onclick="closeTrade(${p.id})">✕</button></td></tr>`;
   }).join('');
 }

@@ -43,7 +43,27 @@ def trades():
 @app.route('/api/positions')
 @auth
 def positions():
-    return jsonify(get_open_trades())
+    from config import LEVERAGE
+    from data_feed import get_mark_price
+    trades = get_open_trades()
+    result = []
+    for t in trades:
+        try:
+            price = get_mark_price(t['symbol'])
+        except:
+            price = t.get('entry_price', 0)
+        side = 1 if t['side'] == 'LONG' else -1
+        entry = t['entry_price']
+        qty = t['qty']
+        margin = (qty * entry) / LEVERAGE
+        pnl_pct = side * (price - entry) / entry * LEVERAGE
+        pnl_usdt = margin * pnl_pct
+        t['current_price'] = round(price, 2)
+        t['margin'] = round(margin, 2)
+        t['pnl_pct'] = round(pnl_pct * 100, 2)
+        t['pnl_usdt'] = round(pnl_usdt, 2)
+        result.append(t)
+    return jsonify(result)
 
 # ── Symbols ───────────────────────────────────────────────────────────────────
 @app.route('/api/symbols', methods=['GET'])
