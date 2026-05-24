@@ -158,8 +158,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
   </div>
   <div class="sec-t">Open Positions</div>
   <div class="tbl-card">
-    <table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>SL</th><th>TP</th><th>Qty</th><th>Opened</th><th>Strategy</th></tr></thead>
-    <tbody id="optable"><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">No open positions</td></tr></tbody></table>
+    <table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>SL</th><th>TP</th><th>Qty</th><th>Opened</th><th>Strategy</th><th></th></tr></thead>
+    <tbody id="optable"><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">No open positions</td></tr></tbody></table>
   </div>
 </div>
 
@@ -457,7 +457,8 @@ async function loadPositions(){
     <td>${(p.entry_price||0).toFixed(2)}</td>
     <td class="red">${(p.stop_loss||0).toFixed(2)}</td>
     <td class="green">${(p.take_profit||0).toFixed(2)}</td>
-    <td>${p.qty}</td><td>${(p.opened_at||'').slice(0,16)}</td><td>${p.strategy||'—'}</td></tr>`;
+    <td>${p.qty}</td>    <td>${(p.opened_at||'').slice(0,16)}</td><td>${p.strategy||'—'}</td>
+    <td><button class="btn btn-stop" style="padding:2px 8px;font-size:.65rem" onclick="closeTrade(${p.id})">✕</button></td></tr>`;
   }).join('');
 }
 
@@ -498,6 +499,16 @@ async function manualBuy(){
     body:JSON.stringify({symbol:sym,side:1,qty:0.001})
   });
   if(r.trade_id) alert(`✅ ${sym} LONG opened! Entry: ${r.entry}`);
+  else alert(`❌ ${r.error||'Failed'}`);
+  loadAll();
+}
+async function closeTrade(id){
+  if(!confirm('Close this position?'))return;
+  const r=await api('/api/trade/close',{
+    method:'POST',headers:{...H,'Content-Type':'application/json'},
+    body:JSON.stringify({trade_id:id})
+  });
+  if(r.message) alert(`✅ ${r.message}\nPnL: ${(r.pnl_usdt||0).toFixed(2)} USDT`);
   else alert(`❌ ${r.error||'Failed'}`);
   loadAll();
 }

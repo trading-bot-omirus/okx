@@ -170,6 +170,34 @@ def available_pairs():
             'note': f'Offline — {str(e)[:60]}'
         })
 
+# ── Manual Close Trade ─────────────────────────────────────────────────────────
+@app.route('/api/trade/close', methods=['POST'])
+@auth
+def manual_close():
+    from executor import EX
+    from risk_manager import RISK
+    from data_feed import get_mark_price
+    from database import get_open_trades
+    data  = request.get_json() or {}
+    trade_id = data.get('trade_id')
+    if not trade_id:
+        return jsonify({'error': 'trade_id required'}), 400
+    trades = get_open_trades()
+    trade = next((t for t in trades if t['id'] == trade_id), None)
+    if not trade:
+        return jsonify({'error': 'Trade not found or already closed'}), 404
+    try:
+        price = get_mark_price(trade['symbol'])
+        should_close, reason = RISK.should_close(trade, price)
+        if not should_close:
+            reason = "MANUAL_CLOSE"
+        pnl_pct, pnl_usdt = RISK.calc_pnl(trade, price)
+        RISK.daily_pnl += pnl_usdt
+        EX.close_position(trade, price, reason, pnl_pct, pnl_usdt)
+        return jsonify({'message': f"Closed {trade['symbol']}", 'pnl_usdt': pnl_usdt})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ── Manual Test Trade ──────────────────────────────────────────────────────────
 @app.route('/api/trade/manual', methods=['POST'])
 @auth
