@@ -690,10 +690,11 @@ async function loadPositionsFast(){
     const pnl=p.pnl_usdt||0;
     const pct=p.pnl_pct||0;
     const cls=pnl>=0?'green':'red';
+    const fmt=(v)=>Math.abs(v)<0.01?v.toFixed(4):v.toFixed(2);
     return`<tr><td>${p.symbol}</td><td>${s}</td>
     <td class="v">$${(p.entry_price||0).toFixed(2)}</td>
     <td class="v">$${(p.position||0).toFixed(2)}</td>
-    <td class="${cls} v">${pnl>=0?'+':''}${pnl.toFixed(2)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</td>
+    <td class="${cls} v">${pnl>=0?'+':''}${fmt(pnl)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</td>
     <td class="v">${p.strategy||'—'}</td>
     <td class="v">${p.leverage_display||'2x'}</td>
     <td><button class="btn btn-stop" style="padding:2px 8px;font-size:.65rem" onclick="closeTrade(${p.id})">✕</button></td></tr>`;
