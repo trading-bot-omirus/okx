@@ -88,6 +88,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 .api-status{display:flex;align-items:center;gap:6px;font-size:.7rem;margin-top:6px;color:var(--muted);}
 .api-dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;}
 .api-dot.ok{background:var(--green);}
+@keyframes flash{0%{opacity:1}30%{opacity:.5}100%{opacity:1}}
+.flash{animation:flash .6s ease;}
 .warn-box{background:rgba(255,77,109,.07);border:1px solid rgba(255,77,109,.2);border-radius:7px;padding:9px 12px;font-size:.72rem;color:#ff8fa3;margin-bottom:14px;}
 .pair-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:.74rem;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:border-color .15s;}
 .pair-item:hover{border-color:var(--accent);color:var(--accent);}
@@ -409,20 +411,23 @@ function initCharts(){
 async function loadStats(){
   const s=await api('/api/stats');
   const pnl=+(s.total_pnl||0).toFixed(2);
+  ['kpnl','ktrades','kwr','kbest','kworst','kpaper','kreal'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.classList.add('flash');
+    setTimeout(()=>{if(el)el.classList.remove('flash')},600);
+  });
   document.getElementById('kpnl').textContent=(pnl>=0?'+':'')+pnl+' USDT';
-  document.getElementById('kpnl').className='stat-value '+(pnl>=0?'green':'red');
+  document.getElementById('kpnl').className='stat-value flash '+(pnl>=0?'green':'red');
   document.getElementById('ktrades').textContent=s.total_trades||0;
   document.getElementById('kwr').textContent='Win Rate: '+(s.win_rate||0)+'%';
   document.getElementById('kbest').textContent=(s.best_trade||0)+' USDT';
   document.getElementById('kworst').textContent=(s.worst_trade||0)+' USDT';
   doC.data.datasets[0].data=[s.wins||0,s.losses||0];doC.update();
-  // Load balance
   const b=await api('/api/balance');
   if(b){
     document.getElementById('kpaper').textContent='$'+b.paper_balance+' USDT';
     document.getElementById('kreal').textContent=b.real_balance?'$'+b.real_balance+' USDT':'—';
     document.getElementById('kmode').textContent=b.paper_trading?'📄 Paper':'🔴 LIVE';
-    document.getElementById('kmode').className='stat-value '+(b.paper_trading?'':'red');
+    document.getElementById('kmode').className='stat-value flash '+(b.paper_trading?'':'red');
   }
 }
 
@@ -682,21 +687,25 @@ async function loadPositionsFast(){
   const pos=await api('/api/positions');if(!Array.isArray(pos))return;
   const tb=document.getElementById('optable');
   if(!pos.length){tb.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:16px">No open positions</td></tr>';return;}
+  const old=tb.innerHTML;
   tb.innerHTML=pos.map(p=>{
     const s=p.side==='LONG'?'<span class="badge bl">LONG</span>':'<span class="badge bs">SHORT</span>';
     const pnl=p.pnl_usdt||0;
     const cls=pnl>=0?'green':'red';
     return`<tr><td>${p.symbol}</td><td>${s}</td>
-    <td>${(p.entry_price||0).toFixed(2)}</td>
-    <td>${p.current_price||'—'}</td>
-    <td>${(p.margin||0).toFixed(2)}</td>
-    <td class="${cls}">${pnl>=0?'+':''}${pnl.toFixed(2)}</td>
-    <td class="red">${(p.stop_loss||0).toFixed(2)}</td>
-    <td class="green">${(p.take_profit||0).toFixed(2)}</td>
-    <td>${p.qty}</td>
+    <td class="v">${(p.entry_price||0).toFixed(2)}</td>
+    <td class="v">${p.current_price||'—'}</td>
+    <td class="v">${(p.margin||0).toFixed(2)}</td>
+    <td class="${cls} v">${pnl>=0?'+':''}${pnl.toFixed(2)}</td>
+    <td class="red v">${(p.stop_loss||0).toFixed(2)}</td>
+    <td class="green v">${(p.take_profit||0).toFixed(2)}</td>
+    <td class="v">${p.qty}</td>
     <td>${(p.opened_at||'').slice(0,16)}</td>
     <td><button class="btn btn-stop" style="padding:2px 8px;font-size:.65rem" onclick="closeTrade(${p.id})">✕</button></td></tr>`;
   }).join('');
+  tb.querySelectorAll('.v').forEach(el=>{
+    if(!old.includes(el.textContent))el.classList.add('flash');
+  });
 }
 document.addEventListener('DOMContentLoaded',()=>{
   initCharts();loadAll();
