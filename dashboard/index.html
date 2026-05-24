@@ -678,9 +678,30 @@ async function togglePair(symbol, el){
 async function loadAll(){
   await Promise.all([loadStats(),loadTrades(),loadPositions(),checkStatus(),loadSymbols()]);
 }
+async function loadPositionsFast(){
+  const pos=await api('/api/positions');if(!Array.isArray(pos))return;
+  const tb=document.getElementById('optable');
+  if(!pos.length){tb.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:16px">No open positions</td></tr>';return;}
+  tb.innerHTML=pos.map(p=>{
+    const s=p.side==='LONG'?'<span class="badge bl">LONG</span>':'<span class="badge bs">SHORT</span>';
+    const pnl=p.pnl_usdt||0;
+    const cls=pnl>=0?'green':'red';
+    return`<tr><td>${p.symbol}</td><td>${s}</td>
+    <td>${(p.entry_price||0).toFixed(2)}</td>
+    <td>${p.current_price||'—'}</td>
+    <td>${(p.margin||0).toFixed(2)}</td>
+    <td class="${cls}">${pnl>=0?'+':''}${pnl.toFixed(2)}</td>
+    <td class="red">${(p.stop_loss||0).toFixed(2)}</td>
+    <td class="green">${(p.take_profit||0).toFixed(2)}</td>
+    <td>${p.qty}</td>
+    <td>${(p.opened_at||'').slice(0,16)}</td>
+    <td><button class="btn btn-stop" style="padding:2px 8px;font-size:.65rem" onclick="closeTrade(${p.id})">✕</button></td></tr>`;
+  }).join('');
+}
 document.addEventListener('DOMContentLoaded',()=>{
   initCharts();loadAll();
-  setInterval(loadAll,30000);
+  setInterval(loadAll,15000);
+  setInterval(loadPositionsFast,5000);
 });
 </script>
 </body>
