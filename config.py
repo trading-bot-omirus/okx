@@ -41,8 +41,8 @@ def get_live_config():
             'MAX_DAILY_LOSS':     float(s.get('max_daily_loss', 3.0)) / 100,
             'MAX_DRAWDOWN':       float(s.get('max_drawdown', 12.0)) / 100,
             'MAX_OPEN_POSITIONS': int(s.get('max_open_positions', 3)),
-            'MIN_AGREEMENT':      float(s.get('min_agreement', 60)) / 100,
-            'MIN_ML_CONFIDENCE':  float(s.get('min_ml_confidence', 62)) / 100,
+            'MIN_AGREEMENT':      float(s.get('min_agreement', 50)) / 100,
+            'MIN_ML_CONFIDENCE':  float(s.get('min_ml_confidence', 50)) / 100,
             'TELEGRAM_TOKEN':     s.get('telegram_token', os.getenv('TELEGRAM_TOKEN','')),
             'TELEGRAM_CHAT_ID':   s.get('telegram_chat_id', os.getenv('TELEGRAM_CHAT_ID','')),
         }
@@ -53,7 +53,7 @@ def get_live_config():
             'MAX_RISK_PER_TRADE': 0.01, 'STOP_LOSS_PCT': 0.015,
             'TAKE_PROFIT_PCT': 0.030, 'MAX_DAILY_LOSS': 0.03,
             'MAX_DRAWDOWN': 0.12, 'MAX_OPEN_POSITIONS': 3,
-            'MIN_AGREEMENT': 0.60, 'MIN_ML_CONFIDENCE': 0.62,
+            'MIN_AGREEMENT': 0.50, 'MIN_ML_CONFIDENCE': 0.50,
             'TELEGRAM_TOKEN': os.getenv('TELEGRAM_TOKEN',''),
             'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID',''),
         }

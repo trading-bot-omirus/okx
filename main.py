@@ -4,8 +4,7 @@ Main loop — τρέχει το trading bot
 import time, logging, os, sys
 from datetime import datetime
 
-from config import (TIMEFRAME, MIN_AGREEMENT, MIN_ML_CONFIDENCE,
-                    RETRAIN_EVERY_HOURS, LOG_FILE)
+from config import (RETRAIN_EVERY_HOURS, LOG_FILE, get_live_config)
 from database import (init_db, get_symbols, get_open_trades,
                       save_signal, get_config, set_config)
 from data_feed import fetch_ohlcv, get_mark_price, fetch_balance
@@ -31,7 +30,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("main")
 
-INTERVAL   = {"1m":60,"3m":180,"5m":300,"15m":900,"1h":3600}.get(TIMEFRAME, 900)
+def current_interval():
+    from config import get_live_config
+    tf = get_live_config().get('TIMEFRAME', '15m')
+    return {"1m":60,"3m":180,"5m":300,"15m":900,"1h":3600}.get(tf, 900)
 last_train = 0.0
 
 def get_market_context(df):
@@ -63,6 +65,11 @@ def get_market_context(df):
 
 def process_symbol(symbol: str, df_btc=None):
     try:
+        # Live config κάθε φορά (όχι frozen imports)
+        _cfg = get_live_config()
+        _min_agreement     = _cfg['MIN_AGREEMENT']
+        _min_ml_confidence = _cfg['MIN_ML_CONFIDENCE']
+
         log.info(f"Fetching data for {symbol}...")
         df = fetch_ohlcv(symbol)
         if df is None or len(df) < 60:
@@ -90,12 +97,17 @@ def process_symbol(symbol: str, df_btc=None):
 
         raw_vals  = [mom_s, mr_s, ml_s, arb_s]
         non_zero  = [x for x in raw_vals if x != 0]
-        agreement = abs(float(np.mean(non_zero))) if non_zero else 0.0
+        if non_zero:
+            longs  = sum(1 for x in non_zero if x > 0)
+            shorts = sum(1 for x in non_zero if x < 0)
+            agreement = max(longs, shorts) / len(non_zero)
+        else:
+            agreement = 0.0
 
-        if agreement < MIN_AGREEMENT:
+        if agreement < _min_agreement:
             log.info(f"{symbol}: low agreement {agreement:.2f} — skip")
             return
-        if ml_c > 0 and ml_c < MIN_ML_CONFIDENCE:
+        if ml_c > 0 and ml_c < _min_ml_confidence:
             log.info(f"{symbol}: low ml_conf {ml_c:.2f} — skip")
             return
         if ctx['vol_ratio'] < 0.3:
@@ -194,8 +206,9 @@ def main():
             symbols = get_symbols()
             log.info(f"Scanning {len(symbols)} symbols: {symbols}")
 
+            _interval = current_interval()
             # Refresh BTC data για arbitrage
-            if time.time() - btc_refresh > INTERVAL:
+            if time.time() - btc_refresh > _interval:
                 try:
                     df_btc      = fetch_ohlcv("BTC/USDT")
                     btc_refresh = time.time()
@@ -211,8 +224,8 @@ def main():
 
             maybe_retrain()
 
-            log.info(f"Cycle done. Sleeping {INTERVAL}s...")
-            time.sleep(INTERVAL)
+            log.info(f"Cycle done. Sleeping {_interval}s...")
+            time.sleep(_interval)
 
         except Exception as e:
             log.error(f"Main loop error: {e}", exc_info=True)
