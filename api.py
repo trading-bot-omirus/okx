@@ -232,7 +232,7 @@ def manual_trade():
         entry = get_mark_price(symbol)
         usd   = float(data.get('usd', 50))
         lev   = int(data.get('leverage', 8))
-        qty   = round(usd / entry, 6)
+        qty   = round(usd * lev / entry, 6)
         sl    = data.get('sl', round(entry * 0.98, 2))
         tp    = data.get('tp', round(entry * 1.03, 2))
         trade_id = EX.open_position(symbol, side, qty, entry, sl, tp,
