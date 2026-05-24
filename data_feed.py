@@ -6,6 +6,7 @@ import ccxt, pandas as pd, logging
 from config import OKX_API_KEY, OKX_API_SECRET, OKX_PASSPHRASE, TESTNET, TIMEFRAME, LOOKBACK_BARS
 
 log = logging.getLogger(__name__)
+_exchange = None
 
 def _to_okx_symbol(symbol: str) -> str:
     """BTC/USDT → BTC/USDT:USDT  (OKX perpetual swap format)"""
@@ -15,38 +16,47 @@ def _to_okx_symbol(symbol: str) -> str:
     return symbol
 
 def get_exchange():
+    global _exchange
+    if _exchange is not None:
+        return _exchange
     ex = ccxt.okx({
         'apiKey':     OKX_API_KEY,
         'secret':     OKX_API_SECRET,
-        'password':   OKX_PASSPHRASE,   # OKX passphrase
+        'password':   OKX_PASSPHRASE,
         'options': {
-            'defaultType': 'swap',       # perpetual futures
+            'defaultType': 'swap',
         },
         'enableRateLimit': True,
     })
     if TESTNET:
         ex.set_sandbox_mode(True)
-    return ex
-
-def fetch_ohlcv(symbol: str, timeframe=TIMEFRAME, limit=LOOKBACK_BARS) -> pd.DataFrame:
-    ex  = get_exchange()
-    sym = _to_okx_symbol(symbol)
     try:
-        ex.load_markets()
-    except TypeError:
-        log.warning("load_markets() failed — some OKX testnet markets have null base")
-        ex.markets = {}
-    raw = ex.fetch_ohlcv(sym, timeframe, limit=limit)
-    df  = pd.DataFrame(raw, columns=['timestamp','open','high','low','close','volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df.set_index('timestamp', inplace=True)
-    return df
+        markets = ex.load_markets()
+        ex.markets = {k: v for k, v in markets.items() if v.get('base')}
+    except Exception as e:
+        log.warning(f"load_markets failed: {e} — continuing without validation")
+    _exchange = ex
+    return _exchange
+
+def fetch_ohlcv(symbol: str, timeframe=TIMEFRAME, limit=LOOKBACK_BARS):
+    try:
+        ex  = get_exchange()
+        sym = _to_okx_symbol(symbol)
+        raw = ex.fetch_ohlcv(sym, timeframe, limit=limit)
+        if not raw:
+            return None
+        df  = pd.DataFrame(raw, columns=['timestamp','open','high','low','close','volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('timestamp', inplace=True)
+        return df
+    except Exception as e:
+        log.warning(f"fetch_ohlcv {symbol}: {e}")
+        return None
 
 def fetch_ticker(symbol: str) -> dict:
     return get_exchange().fetch_ticker(_to_okx_symbol(symbol))
 
 def fetch_balance() -> dict:
-    """Επιστρέφει USDT balance από OKX"""
     ex      = get_exchange()
     balance = ex.fetch_balance({'type': 'swap'})
     return balance
