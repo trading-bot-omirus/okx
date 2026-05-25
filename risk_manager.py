@@ -65,7 +65,7 @@ class RiskManager:
         else:            # SHORT
             sl = entry * (1 + STOP_LOSS_PCT)
             tp = entry * (1 - TAKE_PROFIT_PCT)
-        return round(sl, 4), round(tp, 4)
+        return round(sl, 8), round(tp, 8)
 
     def should_close(self, trade: dict, current_price: float) -> tuple[bool, str]:
         side  = 1 if trade['side'] == 'LONG' else -1
