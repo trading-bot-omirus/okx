@@ -451,7 +451,7 @@ async function loadTrades(){
     return`<tr><td>${t.id}</td><td>${t.symbol}</td><td>${s}</td>
     <td>${(t.entry_price||0).toFixed(2)}</td><td>${t.exit_price?t.exit_price.toFixed(2):'—'}</td>
     <td class="${c}">${t.pnl_pct?(t.pnl_pct*100).toFixed(2)+'%':'—'}</td>
-    <td class="${c}">${t.pnl_usdt?t.pnl_usdt.toFixed(2):'—'}</td>
+    <td class="${c}">${t.pnl_usdt?'$'+t.pnl_usdt.toFixed(2):'—'}</td>
     <td>${t.status}</td><td>${t.strategy||'—'}</td><td>${(t.opened_at||'').slice(0,16)}</td></tr>`;
   }).join('');
 }
@@ -523,7 +523,7 @@ async function closeTrade(id){
     method:'POST',headers:{...H,'Content-Type':'application/json'},
     body:JSON.stringify({trade_id:id})
   });
-  if(r.message) alert(`✅ ${r.message}\nPnL: ${(r.pnl_usdt||0).toFixed(2)} USDT`);
+  if(r.message) alert(`✅ ${r.message}\nPnL: $${(r.pnl_usdt||0).toFixed(2)}`);
   else alert(`❌ ${r.error||'Failed'}`);
   loadAll();
 }
