@@ -286,6 +286,7 @@ def reset_balance():
     conn = get_conn()
     conn.execute("DELETE FROM trades")
     conn.execute("DELETE FROM signals")
+    conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('trades','signals')")
     conn.commit()
     conn.close()
     return jsonify({'message': 'All trades cleared. Balance reset to $1,000', 'paper_balance': 1000.0})
