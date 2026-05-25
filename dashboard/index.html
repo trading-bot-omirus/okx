@@ -21,8 +21,9 @@ header h1{font-size:.95rem;font-weight:500;color:var(--accent);}
 .tab{display:none;padding:18px 28px;max-width:1400px;margin:0 auto;}
 .tab.active{display:block;}
 .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
 .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px;}
-@media(max-width:900px){.grid-4,.grid-2{grid-template-columns:1fr 1fr;}}
+@media(max-width:900px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr 1fr;}}
 .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;}
 .card-title{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;}
 .stat-value{font-size:1.6rem;font-weight:500;}
@@ -118,13 +119,26 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 
 <!-- OVERVIEW -->
 <div class="tab active" id="tab-overview">
-  <!-- Balance Row -->
-  <div class="grid-4" style="margin-bottom:10px">
+  <!-- Stats Row 1 -->
+  <div class="grid-3" style="margin-bottom:10px">
     <div class="card" style="border-color:#6c63ff55">
       <div class="card-title">📄 Paper Balance</div>
       <div class="stat-value" id="kpaper" style="color:#6c63ff">—</div>
-      <div class="stat-sub">Simulation κεφάλαιο</div>
+      <div class="stat-sub">Ελεύθερο κεφάλαιο</div>
     </div>
+    <div class="card" style="border-color:#ffd16655">
+      <div class="card-title">🔒 Balance in Trades</div>
+      <div class="stat-value" id="kinTrades" style="color:var(--yellow)">—</div>
+      <div class="stat-sub">Δεσμευμένο margin</div>
+    </div>
+    <div class="card" style="border-color:#6c63ff55">
+      <div class="card-title">💰 Total Balance</div>
+      <div class="stat-value" id="kTotalBalance" style="color:#6c63ff">—</div>
+      <div class="stat-sub">Ελεύθερο + Δεσμευμένο</div>
+    </div>
+  </div>
+  <!-- Stats Row 2 -->
+  <div class="grid-3" style="margin-bottom:10px">
     <div class="card" style="border-color:#00d08455">
       <div class="card-title">💰 Real OKX Balance</div>
       <div class="stat-value green" id="kreal">—</div>
@@ -136,17 +150,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
       <div class="stat-sub">Paper / Live</div>
     </div>
     <div class="card">
-      <div class="card-title">📊 Open Positions</div>
-      <div class="stat-value" id="kopenpos">—</div>
-      <div class="stat-sub">από max <span id="kmaxpos">3</span></div>
+      <div class="card-title">Total Trades</div>
+      <div class="stat-value" id="ktrades">—</div>
+      <div class="stat-sub" id="kwr">Win Rate: —</div>
     </div>
-  </div>
-  <!-- PnL Row -->
-  <div class="grid-4">
-    <div class="card"><div class="card-title">Total PnL</div><div class="stat-value" id="kpnl">—</div><div class="stat-sub">USDT realized</div></div>
-    <div class="card"><div class="card-title">Total Trades</div><div class="stat-value" id="ktrades">—</div><div class="stat-sub" id="kwr">Win Rate: —</div></div>
-    <div class="card"><div class="card-title">Best Trade</div><div class="stat-value green" id="kbest">—</div><div class="stat-sub">USDT</div></div>
-    <div class="card"><div class="card-title">Worst Trade</div><div class="stat-value red" id="kworst">—</div><div class="stat-sub">USDT</div></div>
   </div>
   <div class="grid-2">
     <div class="card"><div class="card-title">Cumulative PnL (USDT)</div><div class="chart-wrap"><canvas id="cpnl" role="img" aria-label="PnL chart">PnL</canvas></div></div>
@@ -411,20 +418,18 @@ function initCharts(){
 async function loadStats(){
   const s=await api('/api/stats');
   const pnl=+(s.total_pnl||0).toFixed(2);
-  ['kpnl','ktrades','kwr','kbest','kworst','kpaper','kreal'].forEach(id=>{
+  ['ktrades','kwr','kpaper','kreal','kmode','kinTrades','kTotalBalance'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.classList.add('flash');
     setTimeout(()=>{if(el)el.classList.remove('flash')},600);
   });
-  document.getElementById('kpnl').textContent=(pnl>=0?'+':'')+pnl+' USDT';
-  document.getElementById('kpnl').className='stat-value flash '+(pnl>=0?'green':'red');
   document.getElementById('ktrades').textContent=s.total_trades||0;
   document.getElementById('kwr').textContent='Win Rate: '+(s.win_rate||0)+'%';
-  document.getElementById('kbest').textContent=(s.best_trade||0)+' USDT';
-  document.getElementById('kworst').textContent=(s.worst_trade||0)+' USDT';
   doC.data.datasets[0].data=[s.wins||0,s.losses||0];doC.update();
   const b=await api('/api/balance');
   if(b){
     document.getElementById('kpaper').textContent='$'+b.paper_balance+' USDT';
+    document.getElementById('kinTrades').textContent='$'+b.in_trades+' USDT';
+    document.getElementById('kTotalBalance').textContent='$'+b.total_balance+' USDT';
     document.getElementById('kreal').textContent=b.real_balance?'$'+b.real_balance+' USDT':'—';
     document.getElementById('kmode').textContent=b.paper_trading?'📄 Paper':'🔴 LIVE';
     document.getElementById('kmode').className='stat-value flash '+(b.paper_trading?'':'red');

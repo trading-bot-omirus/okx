@@ -255,6 +255,8 @@ def get_balance():
     result = {
         'paper_trading':  True,
         'paper_balance':  paper_balance,
+        'in_trades':      round(open_margin, 2),
+        'total_balance':  round(paper_balance + open_margin, 2),
         'real_balance':   None,
         'currency':       'USDT',
     }
