@@ -503,8 +503,8 @@ async function checkStatus(){
   document.getElementById('sdot').className='dot '+(running?'running':'stopped');
   document.getElementById('stxt').textContent=running?'Bot Running':'Bot Stopped';
 }
-async function startBot(){await api('/api/bot/start',{method:'POST'});checkStatus();}
-async function stopBot(){await api('/api/bot/stop',{method:'POST'});checkStatus();}
+async function startBot(){if(!confirm('Να ξεκινήσει το bot;'))return;await api('/api/bot/start',{method:'POST'});checkStatus();}
+async function stopBot(){if(!confirm('Να σταματήσει το bot;'))return;await api('/api/bot/stop',{method:'POST'});checkStatus();}
 async function manualBuy(){
   const sym=prompt('Symbol:','BTC/USDT')||'BTC/USDT';
   const usd=parseFloat(prompt('$ USDT to invest:','50'))||50;
