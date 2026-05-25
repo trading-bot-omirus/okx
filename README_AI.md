@@ -96,6 +96,9 @@ This file tells a new AI assistant everything it needs to know to continue worki
 ### Phase 10: Duplicate Symbol Fix
 29. **Skip duplicate open position** (`main.py`): Πριν το bot άνοιγε πολλαπλές θέσεις στο ίδιο symbol (π.χ. 2 φορές ATOM/LONG). Τώρα ελέγχει αν υπάρχει ήδη ανοιχτή θέση στο ίδιο symbol πριν ανοίξει νέα.
 
+### Phase 10: Dashboard Redesign
+30. **Dashboard cleanup** (`index.html`, `api.py`): Αφαιρέθηκαν Open Positions, Total PnL, Best Trade, Worst Trade. Προστέθηκαν Balance in Trades (margin σε θέσεις) και Total Balance (ελεύθερο + δεσμευμένο). Νέα grid-3 διάταξη.
+
 ---
 
 ## Current state
