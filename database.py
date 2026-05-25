@@ -115,7 +115,7 @@ def get_stats():
             ROUND(AVG(pnl_pct),4)               AS avg_pnl_pct,
             ROUND(MAX(pnl_usdt),2)              AS best_trade,
             ROUND(MIN(pnl_usdt),2)              AS worst_trade
-        FROM trades WHERE status='CLOSED'
+        FROM trades WHERE status!='OPEN'
     """).fetchone()
     conn.close()
     d = dict(r)
