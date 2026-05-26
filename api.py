@@ -313,25 +313,36 @@ def run_backtest():
 @app.route('/api/backtest/status')
 @auth
 def backtest_status():
-    import os
-    bt_path = 'data/backtest_trades.json'
+    import os, json as _json
+    path      = 'data/backtest_trades.json'
     model_path = 'models/meta_learner.pkl'
-    if not os.path.exists(bt_path):
-        return jsonify({'status': 'not_run', 'message': 'Δεν έχει τρέξει ακόμα backtest'})
-    with open(bt_path) as f:
-        import json as _json
-        trades = _json.load(f)
-    wins = sum(1 for t in trades if t['outcome'] == 2)
-    losses = sum(1 for t in trades if t['outcome'] == 0)
-    neutral = sum(1 for t in trades if t['outcome'] == 1)
+    if not os.path.exists(path):
+        return jsonify({'status': 'not_run',
+                        'message': 'Δεν έχει τρέξει ακόμα backtest'})
+    try:
+        with open(path) as f:
+            trades = _json.load(f)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
     total = len(trades)
+    if total == 0:
+        return jsonify({'status': 'insufficient', 'total_trades': 0,
+                        'hint': 'backtest generated no signals — check logs'})
+    wins    = sum(1 for t in trades if t['outcome'] == 2)
+    losses  = sum(1 for t in trades if t['outcome'] == 0)
+    neutral = sum(1 for t in trades if t['outcome'] == 1)
+    by_symbol = {}
+    for t in trades:
+        s = t['symbol']
+        by_symbol[s] = by_symbol.get(s, 0) + 1
     return jsonify({
-        'status': 'complete' if total >= 50 else 'insufficient',
+        'status':       'complete' if total >= 50 else 'insufficient',
         'total_trades': total,
-        'wins': wins,
-        'losses': losses,
-        'neutral': neutral,
-        'win_rate': round(wins / total * 100, 1) if total else 0,
+        'wins':         wins,
+        'losses':       losses,
+        'neutral':      neutral,
+        'win_rate':     round(wins / total * 100, 1) if total else 0,
+        'by_symbol':    by_symbol,
         'model_trained': os.path.exists(model_path),
     })
 

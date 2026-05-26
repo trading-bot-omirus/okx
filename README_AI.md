@@ -135,30 +135,29 @@ This file tells a new AI assistant everything it needs to know to continue worki
 
 ### Phase 12: ML Backtest Bootstrap (2026-05-25)
 
-**Αιτία**: Το `train_from_db()` χρειάζεται 100+ trades από live data. Με ~12 trades/μήνα θα περιμέναμε 8 μήνες. Λύση: φτιάξαμε backtest engine που τρέχει σε 15-20 λεπτά και παράγει 500+ εικονικά trades από 1 έτος historical data OKX.
+**Αιτία**: Το `train_from_db()` χρειάζεται 100+ trades από live data. Με ~12 trades/μήνα θα περιμέναμε 8 μήνες. Λύση: φτιάξαμε backtest engine που τρέχει σε 5-10 λεπτά και παράγει 500+ εικονικά trades από historical data OKX.
 
 **Αλλαγές**:
 
 | # | Αρχείο | Τι άλλαξε |
 |---|--------|-----------|
-| 37 | `backtest.py` | **Νέο αρχείο**. Κατεβάζει 1 έτος 15m OHLCV από live OKX (public API), τρέχει arb strategy, προσομοιώνει SL/TP, αποθηκεύει αποτελέσματα σε `data/backtest_trades.json`. |
-| 38 | `meta_learner.py` | Πρόσθεσε `train_from_backtest()`. Φορτώνει backtest trades, χτίζει features, εκπαιδεύει XGBoost, αποθηκεύει στο `models/meta_learner.pkl`. |
-| 39 | `api.py` | Πρόσθεσε `POST /api/backtest/run` (background thread) και `GET /api/backtest/status`. |
+| 37 | `backtest.py` | **Νέο αρχείο**. Signal generation με RSI + Bollinger Bands (backtestable από OHLCV). `fetch_history()` με `ccxt.okx()` χωρίς sandbox, 180 ημέρες 5m data. `simulate_trade()` με SL 1.5% / TP 2.5%. Αποθηκεύει σε `data/backtest_trades.json`. |
+| 38 | `meta_learner.py` | Πρόσθεσε `train_from_backtest()`. Φορτώνει backtest trades, χτίζει features (όπως `build_features()`), εκπαιδεύει XGBoost, αποθηκεύει στο `models/meta_learner.pkl`. |
+| 39 | `api.py` | Πρόσθεσε `POST /api/backtest/run` (background thread) και `GET /api/backtest/status` (με diagnostics ανά symbol). |
 
 **Backtest flow**:
 ```
 POST /api/backtest/run
   → background thread
-    → fetch_history() for BTC + 7 altcoins (1 year 15m data)
-    → for each candle (skip every 12 = ~3h):
-        → arb.compute(sym_slice, btc_slice)
-        → if signal >= 0.65: simulate_trade() with SL 1.5% / TP 3%
-        → save features + outcome (0=loss, 1=neutral, 2=win)
-    → train XGBoost on all backtest trades
-    → save to models/meta_learner.pkl
+    → fetch_history() for 6 symbols (180 days 5m data)
+    → for each candle (skip every 24 = ~2h):
+        → generate_signal() = RSI(<32 oversold / >68 overbought) + BB(lower/upper band)
+        → if conf >= 0.68: simulate_trade() with SL 1.5% / TP 2.5% / max 144 candles
+        → save market context + outcome (0=loss, 1=neutral, 2=win)
+    → if ≥50 trades: train XGBoost → save to models/meta_learner.pkl
 ```
 
-**Σύνολο**: Αντί να περιμένουμε 6-8 μήνες live trades, έχουμε εκπαιδευμένο ML σε 15-20 λεπτά.
+**Σύνολο**: Αντί να περιμένουμε 6-8 μήνες live trades, έχουμε εκπαιδευμένο ML σε 5-10 λεπτά.
 
 **Σημαντικό**: Το backtest χρησιμοποιεί live OKX exchange (όχι testnet) για public OHLCV data — δεν χρειάζονται API keys για fetch ιστορικών δεδομένων.
 
