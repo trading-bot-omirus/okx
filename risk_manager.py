@@ -3,10 +3,43 @@ Risk Manager — position sizing, daily loss limit, drawdown protection
 """
 import logging
 from config import (MAX_RISK_PER_TRADE, MAX_OPEN_POSITIONS, MAX_DAILY_LOSS,
-                    MAX_DRAWDOWN, STOP_LOSS_PCT, TAKE_PROFIT_PCT, LEVERAGE)
+                    MAX_DRAWDOWN, STOP_LOSS_PCT, TAKE_PROFIT_PCT, LEVERAGE,
+                    HARD_STOP_LOSS_PCT, TRAILING_STOP_ENABLED, TRAILING_STOP_PCT)
 from database import get_open_trades, get_stats
 
 log = logging.getLogger(__name__)
+
+# ── Static risk helpers (used by main.py check_all_stops) ──────────────────────
+
+def can_open_position() -> bool:
+    open_trades = get_open_trades()
+    return len(open_trades) < MAX_OPEN_POSITIONS
+
+def check_hard_stop(trade: dict, current_price: float) -> bool:
+    entry = trade['entry_price']
+    lev   = trade.get('leverage', 2)
+    side  = trade['side']
+    if side == 'LONG':
+        raw_pct = (current_price - entry) / entry
+    else:
+        raw_pct = (entry - current_price) / entry
+    return raw_pct * lev < -HARD_STOP_LOSS_PCT
+
+def check_trailing_stop(trade: dict, current_price: float) -> bool:
+    if not TRAILING_STOP_ENABLED:
+        return False
+    side = trade['side']
+    peak = trade.get('peak_price', trade['entry_price'])
+    if side == 'LONG':
+        if current_price > peak:
+            peak = current_price
+        drawdown = (peak - current_price) / peak
+        return drawdown >= TRAILING_STOP_PCT
+    else:
+        if current_price < peak:
+            peak = current_price
+        rally = (current_price - peak) / peak
+        return rally >= TRAILING_STOP_PCT
 
 class RiskManager:
     def __init__(self):
@@ -73,6 +106,15 @@ class RiskManager:
         sl    = trade['stop_loss']
         tp    = trade['take_profit']
 
+        # 1. Hard stop — πριν από όλα
+        if check_hard_stop(trade, current_price):
+            return True, "HARD_STOP"
+
+        # 2. Trailing stop
+        if check_trailing_stop(trade, current_price):
+            return True, "TRAILING_STOP"
+
+        # 3. Fixed stop loss / take profit
         if side == 1:
             if current_price <= sl: return True, "STOP_LOSS"
             if current_price >= tp: return True, "TAKE_PROFIT"

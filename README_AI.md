@@ -99,16 +99,52 @@ This file tells a new AI assistant everything it needs to know to continue worki
 ### Phase 10: Dashboard Redesign
 30. **Dashboard cleanup** (`index.html`, `api.py`): Αφαιρέθηκαν Open Positions, Total PnL, Best Trade, Worst Trade. Προστέθηκαν Balance in Trades (margin σε θέσεις) και Total Balance (ελεύθερο + δεσμευμένο). Νέα grid-3 διάταξη.
 
+### Phase 11: Risk Management Overhaul (2026-05-25)
+
+**Αιτία**: 12 κλειστά trades → win rate 16.7%, net -$142.40. Το momentum (0W/4L, -$47) δεν κέρδισε ποτέ. Το mean_rev (0W/2L, -$187) κατέστρεψε λόγω gapping SL (HBAR -62%, BNB -43%). Μόνο arb ήταν profitable (2W/2L, +$102).
+
+**Αλλαγές**:
+
+| # | Αρχείο | Τι άλλαξε |
+|---|--------|-----------|
+| 31 | `config.py` | Πρόσθεσε: HARD_STOP_LOSS_PCT (8%), MIN_SIGNAL_CONFIDENCE (70%), TRAILING_STOP (2.5%), STRATEGY_*_ENABLED flags, DEFAULT_LEVERAGE (2x), STOP_LOSS_CHECK_INTERVAL (60s), FULL_CYCLE_INTERVAL (300s) |
+| 32 | `database.py` | Πρόσθεσε `peak_price REAL` column στο trades table (για trailing stop). Νέα function `update_trade_peak()`. Νέα statuses: HARD_STOP, TRAILING_STOP. |
+| 33 | `risk_manager.py` | Πρόσθεσε `check_hard_stop()` (κλείνει αν leveraged loss > 8%), `check_trailing_stop()` (2.5% από peak), `can_open_position()`. Η `should_close()` ελέγχει hard stop και trailing stop ΠΡΙΝ το fixed SL/TP. |
+| 34 | `main.py` | Bottleneck split: **(α)** `check_all_stop_losses()` κάθε 60 δευτ. — ελέγχει hard/trailing/fixed stops + ενημερώνει peak_price **(β)** `process_symbol()` κάθε 300 δευτ. — full signal scan. Strategy enable/disable filters & min confidence check. |
+| 35 | `api.py` | Πρόσθεσε όλα τα νέα settings στο `allowed` list του `/api/settings`. |
+| 36 | `dashboard/index.html` | Νέα UI: Hard Stop Loss slider, Min Signal Confidence slider, Trailing Stop toggle + %, Strategy toggles (momentum, mr, arb), SL check interval slider, Full cycle interval slider. |
+| 37 | `notifier.py` | Χρησιμοποιείται με τα νέα statuses HARD_STOP 🚨, TRAILING_STOP 🔔 στα Telegram alerts. |
+
+**Περιγραφή νέου loop**:
+```
+κάθε 60 δευτ. → check_all_stop_losses()
+  ├─ check_hard_stop(trade, price) → HARD_STOP 🚨
+  ├─ check_trailing_stop(trade, price) → TRAILING_STOP 🔔
+  ├─ fixed SL check → STOP_LOSS 🛑
+  ├─ fixed TP check → TAKE_PROFIT ✅
+  └─ update peak_price στη DB (για trailing)
+κάθε 300 δευτ. → full cycle
+  ├─ BTC data refresh
+  ├─ scan όλων των symbols (μόνο enabled strategies)
+  └─ maybe_retrain()
+```
+
+**Απενεργοποιημένες στρατηγικές**: Momentum (0W/4L), Mean Reversion (0W/2L, gapping).
+**Ενεργή**: Arbitrage (2W/2L, +$102 net).
+**Default Leverage**: 2x (πριν: 4x).
+
 ---
 
 ## Current state
 
 - **Mode**: Paper Trading (simulation). Virtual balance: starts at $1,000.
 - **Exchange**: OKX Testnet (sandbox mode in CCXT)
-- **Bot loop**: Runs as a subprocess from the Flask web service. Started/stopped via `/api/bot/start` and `/api/bot/stop`.
+- **Bot loop**: Two-level split: stop loss check every 60s, full signal scan every 300s. Runs as subprocess from Flask.
 - **Balance logic**: Sum of all trades' PnL + margin of open positions. NOT a hardcoded number. Each trade records its own leverage.
-- **Leverage**: Configurable per trade (2-10x). Saved in DB, read in real time by `executor.py`.
-- **Timeframe**: 5 minutes (configurable in Settings)
+- **Leverage**: Default 2x (configurable 1-10x). Saved per trade in DB.
+- **Timeframe**: 15 minutes (configurable in Settings)
+- **Stop loss**: Fixed (1.5% from entry) + Hard stop (8% leveraged max) + Trailing stop (2.5% from peak)
+- **Active strategy**: Arbitrage only. Momentum and Mean Reversion disabled (poor performance)
 
 ---
 
@@ -137,3 +173,7 @@ This file tells a new AI assistant everything it needs to know to continue worki
 - After changing Settings (leverage, strategy, etc.), user must click **Save** then **Restart Bot** for changes to take effect.
 - Paper balance is NOT a fixed number in code. It is calculated from trades. To reset, use `/api/balance/reset`.
 - `load_markets()` bug: OKX testnet returns `base: null` for SWAP markets. The fix clears `ex.markets` and retries. If adding new exchange features, be aware of this.
+- **Stop loss split**: Το bot τώρα έχει 3 επίπεδα stop loss: (1) Hard stop στο 8% leveraged max loss (προστασία από gap), (2) Trailing stop στο 2.5% από peak, (3) Fixed SL στο 1.5% από entry.
+- **Loop timing**: Το bot ελέγχει stop losses κάθε 60 δευτ. αλλά κάνει full scan κάθε 300 δευτ. Αν θες συχνότερο scan, μείωσε το full_cycle_interval.
+- **Disabled strategies**: Momentum και Mean Reversion είναι απενεργοποιημένες από default. Μόνο το Arbitrage είναι ενεργό. Μπορείς να τις ενεργοποιήσεις από Settings → Strategies.
+- **Trailing stop**: Αποθηκεύει peak_price στη DB κάθε 60 δευτ. Αν η τιμή γυρίσει 2.5% από το υψηλότερο σημείο, κλείνει η θέση με status TRAILING_STOP.

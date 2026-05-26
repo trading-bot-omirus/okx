@@ -69,6 +69,7 @@ def process_symbol(symbol: str, df_btc=None):
         _cfg = get_live_config()
         _min_agreement     = _cfg['MIN_AGREEMENT']
         _min_ml_confidence = _cfg['MIN_ML_CONFIDENCE']
+        _min_sig_conf      = _cfg['MIN_SIGNAL_CONFIDENCE']
 
         log.info(f"Fetching data for {symbol}...")
         df = fetch_ohlcv(symbol)
@@ -127,6 +128,28 @@ def process_symbol(symbol: str, df_btc=None):
             log.info(f"{symbol}: no signal — hold")
             return
 
+        # Φίλτρο ελάχιστης εμπιστοσύνης
+        if confidence < _min_sig_conf:
+            log.info(f"{symbol}: confidence {confidence:.2f} < {_min_sig_conf:.2f} — skip")
+            return
+
+        # Ποια strategy έχει το πιο ισχυρό signal
+        strategy_name = max(
+            [('momentum',mom_c),('mean_rev',mr_c),('ml',ml_c),('arb',arb_c)],
+            key=lambda x: x[1]
+        )[0]
+
+        # Έλεγξε αν η strategy είναι enabled
+        if strategy_name == 'momentum' and not _cfg.get('STRATEGY_MOMENTUM_ENABLED', False):
+            log.info(f"{symbol}: momentum disabled — skip")
+            return
+        if strategy_name == 'mean_rev' and not _cfg.get('STRATEGY_MEAN_REV_ENABLED', False):
+            log.info(f"{symbol}: mean_rev disabled — skip")
+            return
+        if strategy_name == 'arb' and not _cfg.get('STRATEGY_ARB_ENABLED', True):
+            log.info(f"{symbol}: arb disabled — skip")
+            return
+
         # Risk check
         try:
             balance_info = fetch_balance()
@@ -153,11 +176,6 @@ def process_symbol(symbol: str, df_btc=None):
             'agreement':  agreement,
         }
 
-        strategy_name = max(
-            [('momentum',mom_c),('mean_rev',mr_c),('ml',ml_c),('arb',arb_c)],
-            key=lambda x: x[1]
-        )[0]
-
         trade_id = EX.open_position(symbol, final_signal, qty, entry, sl, tp,
                                     strategy_name, sig_dict)
         if trade_id:
@@ -182,6 +200,34 @@ def manage_open_trades():
         except Exception as e:
             log.error(f"manage_open_trades {trade.get('id','?')}: {e}", exc_info=True)
 
+def check_all_stop_losses():
+    """
+    Ελέγχει ΜΟΝΟ stop losses / trailing stops / hard stops.
+    Δεν κάνει signal scan — είναι γρήγορη.
+    """
+    from database import update_trade_peak
+    for trade in get_open_trades():
+        try:
+            symbol = trade['symbol']
+            price  = get_mark_price(symbol)
+            should_close, reason = RISK.should_close(trade, price)
+            if should_close:
+                pnl_pct, pnl_usdt = RISK.calc_pnl(trade, price)
+                RISK.daily_pnl   += pnl_usdt
+                EX.close_position(trade, price, reason, pnl_pct, pnl_usdt)
+                emoji = "✅" if pnl_usdt > 0 else "❌"
+                send(f"{emoji} {trade['side']} {symbol} [{reason}]\nPnL: {pnl_usdt:+.2f} USDT ({pnl_pct*100:+.2f}%)")
+            else:
+                # Ενημέρωσε peak_price για trailing stop
+                side = trade['side']
+                peak = trade.get('peak_price') or trade['entry_price']
+                if side == 'LONG' and price > peak:
+                    update_trade_peak(trade['id'], price)
+                elif side == 'SHORT' and price < peak:
+                    update_trade_peak(trade['id'], price)
+        except Exception as e:
+            log.error(f"check_all_stop_losses {trade.get('id','?')}: {e}", exc_info=True)
+
 def maybe_retrain():
     global last_train
     now = time.time()
@@ -200,8 +246,10 @@ def main():
     set_config('running', '1')
     send("🚀 Bot started! Paper Trading mode.")
 
-    df_btc      = None
-    btc_refresh = 0
+    df_btc       = None
+    btc_refresh  = 0
+    last_stop_check = 0.0
+    last_full_cycle = 0.0
 
     while True:
         try:
@@ -209,29 +257,38 @@ def main():
                 log.info("Bot stopped via dashboard.")
                 break
 
-            symbols = get_symbols()
-            log.info(f"Scanning {len(symbols)} symbols: {symbols}")
+            now = time.time()
+            _cfg = get_live_config()
+            sl_interval   = _cfg.get('STOP_LOSS_CHECK_INTERVAL', 60)
+            full_interval = _cfg.get('FULL_CYCLE_INTERVAL', 300)
 
-            _interval = current_interval()
-            # Refresh BTC data για arbitrage
-            if time.time() - btc_refresh > _interval:
-                try:
-                    df_btc      = fetch_ohlcv("BTC/USDT")
-                    btc_refresh = time.time()
-                    log.info("BTC/USDT data refreshed for arbitrage")
-                except Exception as e:
-                    log.warning(f"BTC data refresh failed: {e}")
+            # ── ΕΠΙΠΕΔΟ 1: Stop loss check (κάθε sl_interval δευτ.) ──
+            if now - last_stop_check >= sl_interval:
+                check_all_stop_losses()
+                last_stop_check = time.time()
 
-            manage_open_trades()
+            # ── ΕΠΙΠΕΔΟ 2: Full cycle (κάθε full_interval δευτ.) ──
+            if now - last_full_cycle >= full_interval:
+                symbols = get_symbols()
+                log.info(f"Full cycle — scanning {len(symbols)} symbols: {symbols}")
 
-            for symbol in symbols:
-                process_symbol(symbol, df_btc if symbol != "BTC/USDT" else None)
-                time.sleep(2)
+                # Refresh BTC data για arbitrage
+                if time.time() - btc_refresh > full_interval:
+                    try:
+                        df_btc      = fetch_ohlcv("BTC/USDT")
+                        btc_refresh = time.time()
+                        log.info("BTC/USDT data refreshed for arbitrage")
+                    except Exception as e:
+                        log.warning(f"BTC data refresh failed: {e}")
 
-            maybe_retrain()
+                for symbol in symbols:
+                    process_symbol(symbol, df_btc if symbol != "BTC/USDT" else None)
+                    time.sleep(2)
 
-            log.info(f"Cycle done. Sleeping {_interval}s...")
-            time.sleep(_interval)
+                maybe_retrain()
+                last_full_cycle = time.time()
+
+            time.sleep(sl_interval)
 
         except Exception as e:
             log.error(f"Main loop error: {e}", exc_info=True)

@@ -339,6 +339,18 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
         <span class="slider-val" id="r-pos">3</span>
       </div>
       <div class="slider-row">
+        <span class="slider-label">Hard Stop Loss (leveraged %)</span>
+        <input type="range" min="5" max="25" value="8" step="1" id="s-hardstop"
+               oninput="sv('r-hardstop',this.value+'%')">
+        <span class="slider-val" id="r-hardstop">8%</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Min Signal Confidence</span>
+        <input type="range" min="40" max="95" value="70" step="5" id="s-minsig"
+               oninput="sv('r-minsig',this.value+'%')">
+        <span class="slider-val" id="r-minsig">70%</span>
+      </div>
+      <div class="slider-row">
         <span class="slider-label">Min Bot Agreement</span>
         <input type="range" min="40" max="100" value="60" step="5" id="s-agree"
                oninput="sv('r-agree',this.value+'%')">
@@ -349,6 +361,52 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
         <input type="range" min="40" max="90" value="62" step="2" id="s-mlconf"
                oninput="sv('r-mlconf',this.value+'%')">
         <span class="slider-val" id="r-mlconf">62%</span>
+      </div>
+      <hr style="border-color:rgba(255,255,255,.08);margin:14px 0">
+      <div class="tog-wrap">
+        <label class="tog"><input type="checkbox" id="s-trailing"><span class="tog-sl"></span></label>
+        <span class="tog-label">Trailing Stop</span>
+      </div>
+      <div class="slider-row" style="margin-top:6px">
+        <span class="slider-label">Trailing Stop %</span>
+        <input type="range" min="1" max="10" value="2.5" step="0.5" id="s-trailpct"
+               oninput="sv('r-trailpct',this.value+'%')">
+        <span class="slider-val" id="r-trailpct">2.5%</span>
+      </div>
+    </div>
+
+    <!-- Strategies -->
+    <div class="scard">
+      <div class="scard-title">🧠 Strategies</div>
+      <div style="color:var(--muted);font-size:.72rem;margin-bottom:10px">Ενεργοποίησε / απενεργοποίησε στρατηγικές</div>
+      <div class="tog-wrap">
+        <label class="tog"><input type="checkbox" id="s-strat-mom"><span class="tog-sl"></span></label>
+        <span class="tog-label">Momentum <span style="color:var(--muted);font-size:.68rem">(0W/4L — disabled)</span></span>
+      </div>
+      <div class="tog-wrap">
+        <label class="tog"><input type="checkbox" id="s-strat-mr"><span class="tog-sl"></span></label>
+        <span class="tog-label">Mean Reversion <span style="color:var(--muted);font-size:.68rem">(0W/2L — disabled)</span></span>
+      </div>
+      <div class="tog-wrap">
+        <label class="tog"><input type="checkbox" id="s-strat-arb"><span class="tog-sl"></span></label>
+        <span class="tog-label">Arbitrage <span style="color:var(--muted);font-size:.68rem">(2W/2L — enabled)</span></span>
+      </div>
+    </div>
+
+    <!-- Bot Cycle -->
+    <div class="scard">
+      <div class="scard-title">⏱ Bot Cycle</div>
+      <div class="slider-row">
+        <span class="slider-label">SL Check Interval (sec)</span>
+        <input type="range" min="10" max="120" value="60" step="10" id="s-slint"
+               oninput="sv('r-slint',this.value+'s')">
+        <span class="slider-val" id="r-slint">60s</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Full Cycle Interval (sec)</span>
+        <input type="range" min="60" max="900" value="300" step="30" id="s-fullint"
+               oninput="sv('r-fullint',this.value+'s')">
+        <span class="slider-val" id="r-fullint">300s</span>
       </div>
     </div>
 
@@ -584,10 +642,24 @@ async function loadSettings(){
   document.getElementById('s-dd').value=dd;sv('r-dd',dd+'%');
   const mp=s.max_open_positions||'3';
   document.getElementById('s-pos').value=mp;sv('r-pos',mp);
+  const hs=s.hard_stop_pct||'8';
+  document.getElementById('s-hardstop').value=hs;sv('r-hardstop',hs+'%');
+  const mc2=s.min_signal_confidence||'70';
+  document.getElementById('s-minsig').value=mc2;sv('r-minsig',mc2+'%');
   const ag=s.min_agreement||'60';
   document.getElementById('s-agree').value=ag;sv('r-agree',ag+'%');
   const mc=s.min_ml_confidence||'62';
   document.getElementById('s-mlconf').value=mc;sv('r-mlconf',mc+'%');
+  document.getElementById('s-trailing').checked=s.trailing_stop_enabled==='1';
+  const trp=s.trailing_stop_pct||'2.5';
+  document.getElementById('s-trailpct').value=trp;sv('r-trailpct',trp+'%');
+  document.getElementById('s-strat-mom').checked=s.strategy_momentum_enabled==='1';
+  document.getElementById('s-strat-mr').checked=s.strategy_mean_rev_enabled==='1';
+  document.getElementById('s-strat-arb').checked=s.strategy_arb_enabled==='1';
+  const sint=s.stop_loss_check_interval||'60';
+  document.getElementById('s-slint').value=sint;sv('r-slint',sint+'s');
+  const fint=s.full_cycle_interval||'300';
+  document.getElementById('s-fullint').value=fint;sv('r-fullint',fint+'s');
   document.getElementById('s-tgchat').value=s.telegram_chat_id||'';
   document.getElementById('s-tgenabled').checked=s.telegram_enabled==='1';
   if(s.telegram_token){
@@ -598,21 +670,30 @@ async function loadSettings(){
 
 async function saveSettings(){
   const payload={
-    leverage:           document.getElementById('s-leverage').value,
-    margin_type:        document.getElementById('s-margin').value,
-    timeframe:          document.getElementById('s-timeframe').value,
-    testnet:            document.getElementById('s-testnet').checked?'1':'0',
-    paper_trading:      document.getElementById('s-paper').checked?'1':'0',
-    max_risk_per_trade: document.getElementById('s-risk').value,
-    stop_loss_pct:      document.getElementById('s-sl').value,
-    take_profit_pct:    document.getElementById('s-tp').value,
-    max_daily_loss:     document.getElementById('s-daily').value,
-    max_drawdown:       document.getElementById('s-dd').value,
-    max_open_positions: document.getElementById('s-pos').value,
-    min_agreement:      document.getElementById('s-agree').value,
-    min_ml_confidence:  document.getElementById('s-mlconf').value,
-    telegram_chat_id:   document.getElementById('s-tgchat').value,
-    telegram_enabled:   document.getElementById('s-tgenabled').checked?'1':'0',
+    leverage:                document.getElementById('s-leverage').value,
+    margin_type:             document.getElementById('s-margin').value,
+    timeframe:               document.getElementById('s-timeframe').value,
+    testnet:                 document.getElementById('s-testnet').checked?'1':'0',
+    paper_trading:           document.getElementById('s-paper').checked?'1':'0',
+    max_risk_per_trade:      document.getElementById('s-risk').value,
+    stop_loss_pct:           document.getElementById('s-sl').value,
+    take_profit_pct:         document.getElementById('s-tp').value,
+    max_daily_loss:          document.getElementById('s-daily').value,
+    max_drawdown:            document.getElementById('s-dd').value,
+    max_open_positions:      document.getElementById('s-pos').value,
+    hard_stop_pct:           document.getElementById('s-hardstop').value,
+    min_signal_confidence:   document.getElementById('s-minsig').value,
+    min_agreement:           document.getElementById('s-agree').value,
+    min_ml_confidence:       document.getElementById('s-mlconf').value,
+    trailing_stop_enabled:   document.getElementById('s-trailing').checked?'1':'0',
+    trailing_stop_pct:       document.getElementById('s-trailpct').value,
+    strategy_momentum_enabled: document.getElementById('s-strat-mom').checked?'1':'0',
+    strategy_mean_rev_enabled: document.getElementById('s-strat-mr').checked?'1':'0',
+    strategy_arb_enabled:      document.getElementById('s-strat-arb').checked?'1':'0',
+    stop_loss_check_interval:  document.getElementById('s-slint').value,
+    full_cycle_interval:       document.getElementById('s-fullint').value,
+    telegram_chat_id:      document.getElementById('s-tgchat').value,
+    telegram_enabled:      document.getElementById('s-tgenabled').checked?'1':'0',
   };
   const tok=document.getElementById('s-tgtoken').value;
   if(tok) payload.telegram_token=tok;

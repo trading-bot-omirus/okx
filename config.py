@@ -45,6 +45,17 @@ def get_live_config():
             'MIN_ML_CONFIDENCE':  float(s.get('min_ml_confidence', 50)) / 100,
             'TELEGRAM_TOKEN':     s.get('telegram_token', os.getenv('TELEGRAM_TOKEN','')),
             'TELEGRAM_CHAT_ID':   s.get('telegram_chat_id', os.getenv('TELEGRAM_CHAT_ID','')),
+            # Risk overhaul
+            'DEFAULT_LEVERAGE':           int(s.get('default_leverage', 2)),
+            'HARD_STOP_LOSS_PCT':         float(s.get('hard_stop_pct', 8.0)) / 100,
+            'MIN_SIGNAL_CONFIDENCE':      float(s.get('min_signal_confidence', 70)) / 100,
+            'TRAILING_STOP_ENABLED':      s.get('trailing_stop_enabled', '1') == '1',
+            'TRAILING_STOP_PCT':          float(s.get('trailing_stop_pct', 2.5)) / 100,
+            'STRATEGY_MOMENTUM_ENABLED':  s.get('strategy_momentum_enabled', '0') == '1',
+            'STRATEGY_MEAN_REV_ENABLED':  s.get('strategy_mean_rev_enabled', '0') == '1',
+            'STRATEGY_ARB_ENABLED':       s.get('strategy_arb_enabled', '1') == '1',
+            'STOP_LOSS_CHECK_INTERVAL':   int(s.get('stop_loss_check_interval', 60)),
+            'FULL_CYCLE_INTERVAL':        int(s.get('full_cycle_interval', 300)),
         }
     except Exception:
         return {
@@ -56,6 +67,11 @@ def get_live_config():
             'MIN_AGREEMENT': 0.50, 'MIN_ML_CONFIDENCE': 0.50,
             'TELEGRAM_TOKEN': os.getenv('TELEGRAM_TOKEN',''),
             'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID',''),
+            'DEFAULT_LEVERAGE': 2, 'HARD_STOP_LOSS_PCT': 0.08,
+            'MIN_SIGNAL_CONFIDENCE': 0.70, 'TRAILING_STOP_ENABLED': True,
+            'TRAILING_STOP_PCT': 0.025, 'STRATEGY_MOMENTUM_ENABLED': False,
+            'STRATEGY_MEAN_REV_ENABLED': False, 'STRATEGY_ARB_ENABLED': True,
+            'STOP_LOSS_CHECK_INTERVAL': 60, 'FULL_CYCLE_INTERVAL': 300,
         }
 
 _cfg = get_live_config()
@@ -74,3 +90,14 @@ MIN_AGREEMENT      = _cfg['MIN_AGREEMENT']
 MIN_ML_CONFIDENCE  = _cfg['MIN_ML_CONFIDENCE']
 TELEGRAM_TOKEN     = _cfg['TELEGRAM_TOKEN']
 TELEGRAM_CHAT_ID   = _cfg['TELEGRAM_CHAT_ID']
+# Risk overhaul
+DEFAULT_LEVERAGE           = _cfg['DEFAULT_LEVERAGE']
+HARD_STOP_LOSS_PCT         = _cfg['HARD_STOP_LOSS_PCT']
+MIN_SIGNAL_CONFIDENCE      = _cfg['MIN_SIGNAL_CONFIDENCE']
+TRAILING_STOP_ENABLED      = _cfg['TRAILING_STOP_ENABLED']
+TRAILING_STOP_PCT          = _cfg['TRAILING_STOP_PCT']
+STRATEGY_MOMENTUM_ENABLED  = _cfg['STRATEGY_MOMENTUM_ENABLED']
+STRATEGY_MEAN_REV_ENABLED  = _cfg['STRATEGY_MEAN_REV_ENABLED']
+STRATEGY_ARB_ENABLED       = _cfg['STRATEGY_ARB_ENABLED']
+STOP_LOSS_CHECK_INTERVAL   = _cfg['STOP_LOSS_CHECK_INTERVAL']
+FULL_CYCLE_INTERVAL        = _cfg['FULL_CYCLE_INTERVAL']

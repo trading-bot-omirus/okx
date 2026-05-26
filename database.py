@@ -24,9 +24,10 @@ def init_db():
         leverage    INTEGER DEFAULT 2,
         pnl_pct     REAL,
         pnl_usdt    REAL,
-        status      TEXT    DEFAULT 'OPEN', -- OPEN / CLOSED / STOPPED
+        status      TEXT    DEFAULT 'OPEN', -- OPEN / CLOSED / STOPPED / HARD_STOP / TRAILING_STOP
         stop_loss   REAL,
         take_profit REAL,
+        peak_price  REAL,                  -- υψηλότερο/χαμηλότερο για trailing stop
         strategy    TEXT,                  -- ποια στρατηγική το πήρε
         signals_json TEXT,                 -- raw signals από bots
         opened_at   TEXT    NOT NULL,
@@ -61,6 +62,11 @@ def init_db():
         max_drawdown REAL    DEFAULT 0
     );
     """)
+    # Add peak_price column for existing databases (safe if already exists)
+    try:
+        conn.execute("ALTER TABLE trades ADD COLUMN peak_price REAL")
+    except Exception:
+        pass
     conn.commit()
     # Default symbols
     symbols = json.dumps(["BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT"])
@@ -82,6 +88,12 @@ def open_trade(symbol, side, entry, qty, leverage, sl, tp, strategy, signals, pa
     trade_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
     return trade_id
+
+def update_trade_peak(trade_id, price):
+    conn = get_conn()
+    conn.execute("UPDATE trades SET peak_price=? WHERE id=?", (price, trade_id))
+    conn.commit()
+    conn.close()
 
 def close_trade(trade_id, exit_price, pnl_pct, pnl_usdt, status="CLOSED"):
     conn = get_conn()
@@ -156,22 +168,33 @@ def set_symbols(symbols: list):
 def get_all_settings() -> dict:
     """Επιστρέφει όλες τις ρυθμίσεις με default τιμές"""
     defaults = {
-        'leverage':           '2',
-        'margin_type':        'isolated',
-        'timeframe':          '15m',
-        'paper_trading':      '1',
-        'testnet':            '1',
-        'max_risk_per_trade': '1.0',
-        'stop_loss_pct':      '1.5',
-        'take_profit_pct':    '3.0',
-        'max_daily_loss':     '3.0',
-        'max_drawdown':       '12.0',
-        'max_open_positions': '3',
-        'min_agreement':      '60',
-        'min_ml_confidence':  '62',
-        'telegram_token':     '',
-        'telegram_chat_id':   '',
-        'telegram_enabled':   '0',
+        'leverage':               '2',
+        'margin_type':            'isolated',
+        'timeframe':              '15m',
+        'paper_trading':          '1',
+        'testnet':                '1',
+        'max_risk_per_trade':     '1.0',
+        'stop_loss_pct':          '1.5',
+        'take_profit_pct':        '3.0',
+        'max_daily_loss':         '3.0',
+        'max_drawdown':           '12.0',
+        'max_open_positions':     '3',
+        'min_agreement':          '60',
+        'min_ml_confidence':      '62',
+        'telegram_token':         '',
+        'telegram_chat_id':       '',
+        'telegram_enabled':       '0',
+        # Risk overhaul defaults
+        'default_leverage':             '2',
+        'hard_stop_pct':                '8.0',
+        'min_signal_confidence':        '70',
+        'trailing_stop_enabled':        '1',
+        'trailing_stop_pct':            '2.5',
+        'strategy_momentum_enabled':    '0',
+        'strategy_mean_rev_enabled':    '0',
+        'strategy_arb_enabled':         '1',
+        'stop_loss_check_interval':     '60',
+        'full_cycle_interval':          '300',
     }
     conn = get_conn()
     rows = conn.execute("SELECT key, value FROM bot_config").fetchall()

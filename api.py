@@ -133,7 +133,12 @@ def update_settings():
         'max_risk_per_trade','stop_loss_pct','take_profit_pct',
         'max_daily_loss','max_drawdown','max_open_positions',
         'min_agreement','min_ml_confidence',
-        'telegram_token','telegram_chat_id','telegram_enabled'
+        'telegram_token','telegram_chat_id','telegram_enabled',
+        # Risk overhaul settings
+        'default_leverage','hard_stop_pct','min_signal_confidence',
+        'trailing_stop_enabled','trailing_stop_pct',
+        'strategy_momentum_enabled','strategy_mean_rev_enabled','strategy_arb_enabled',
+        'stop_loss_check_interval','full_cycle_interval'
     }
     filtered = {k: v for k, v in data.items() if k in allowed}
     db_save_settings(filtered)
