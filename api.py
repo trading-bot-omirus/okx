@@ -296,6 +296,45 @@ def reset_balance():
     conn.close()
     return jsonify({'message': 'All trades cleared. Balance reset to $1,000', 'paper_balance': 1000.0})
 
+# ── Backtest ──────────────────────────────────────────────────────────────────
+@app.route('/api/backtest/run', methods=['POST'])
+@auth
+def run_backtest():
+    import threading
+    def _run():
+        import logging as _log
+        _log.info("Backtest started in background thread...")
+        from backtest import run_backtest as bt
+        bt()
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return jsonify({'status': 'started', 'message': 'Backtest τρέχει σε background...'})
+
+@app.route('/api/backtest/status')
+@auth
+def backtest_status():
+    import os
+    bt_path = 'data/backtest_trades.json'
+    model_path = 'models/meta_learner.pkl'
+    if not os.path.exists(bt_path):
+        return jsonify({'status': 'not_run', 'message': 'Δεν έχει τρέξει ακόμα backtest'})
+    with open(bt_path) as f:
+        import json as _json
+        trades = _json.load(f)
+    wins = sum(1 for t in trades if t['outcome'] == 2)
+    losses = sum(1 for t in trades if t['outcome'] == 0)
+    neutral = sum(1 for t in trades if t['outcome'] == 1)
+    total = len(trades)
+    return jsonify({
+        'status': 'complete' if total >= 50 else 'insufficient',
+        'total_trades': total,
+        'wins': wins,
+        'losses': losses,
+        'neutral': neutral,
+        'win_rate': round(wins / total * 100, 1) if total else 0,
+        'model_trained': os.path.exists(model_path),
+    })
+
 if __name__ == '__main__':
     import os
     os.makedirs('logs', exist_ok=True)

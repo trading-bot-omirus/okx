@@ -133,6 +133,35 @@ This file tells a new AI assistant everything it needs to know to continue worki
 **Ενεργή**: Arbitrage (2W/2L, +$102 net).
 **Default Leverage**: 2x (πριν: 4x).
 
+### Phase 12: ML Backtest Bootstrap (2026-05-25)
+
+**Αιτία**: Το `train_from_db()` χρειάζεται 100+ trades από live data. Με ~12 trades/μήνα θα περιμέναμε 8 μήνες. Λύση: φτιάξαμε backtest engine που τρέχει σε 15-20 λεπτά και παράγει 500+ εικονικά trades από 1 έτος historical data OKX.
+
+**Αλλαγές**:
+
+| # | Αρχείο | Τι άλλαξε |
+|---|--------|-----------|
+| 37 | `backtest.py` | **Νέο αρχείο**. Κατεβάζει 1 έτος 15m OHLCV από live OKX (public API), τρέχει arb strategy, προσομοιώνει SL/TP, αποθηκεύει αποτελέσματα σε `data/backtest_trades.json`. |
+| 38 | `meta_learner.py` | Πρόσθεσε `train_from_backtest()`. Φορτώνει backtest trades, χτίζει features, εκπαιδεύει XGBoost, αποθηκεύει στο `models/meta_learner.pkl`. |
+| 39 | `api.py` | Πρόσθεσε `POST /api/backtest/run` (background thread) και `GET /api/backtest/status`. |
+
+**Backtest flow**:
+```
+POST /api/backtest/run
+  → background thread
+    → fetch_history() for BTC + 7 altcoins (1 year 15m data)
+    → for each candle (skip every 12 = ~3h):
+        → arb.compute(sym_slice, btc_slice)
+        → if signal >= 0.65: simulate_trade() with SL 1.5% / TP 3%
+        → save features + outcome (0=loss, 1=neutral, 2=win)
+    → train XGBoost on all backtest trades
+    → save to models/meta_learner.pkl
+```
+
+**Σύνολο**: Αντί να περιμένουμε 6-8 μήνες live trades, έχουμε εκπαιδευμένο ML σε 15-20 λεπτά.
+
+**Σημαντικό**: Το backtest χρησιμοποιεί live OKX exchange (όχι testnet) για public OHLCV data — δεν χρειάζονται API keys για fetch ιστορικών δεδομένων.
+
 ---
 
 ## Current state

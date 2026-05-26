@@ -2,7 +2,7 @@
 Meta-Learner: συνδυάζει signals από 4 strategies + market context
 Εκπαιδεύεται με walk-forward από ιστορικά trades
 """
-import numpy as np, pandas as pd, joblib, logging, os
+import numpy as np, pandas as pd, joblib, logging, os, json
 from datetime import datetime
 import xgboost as xgb
 from sklearn.preprocessing import LabelEncoder
@@ -141,6 +141,59 @@ class MetaLearner:
             return True
         except Exception as e:
             log.error(f"Training error: {e}")
+            return False
+
+    def train_from_backtest(self, path='data/backtest_trades.json'):
+        """Εκπαιδεύει XGBoost από backtest trades"""
+        try:
+            if not os.path.exists(path):
+                log.warning(f"Backtest file not found: {path}")
+                return False
+            with open(path) as f:
+                trades = json.load(f)
+            if len(trades) < 50:
+                log.info(f"Not enough trades ({len(trades)}). Need 50+")
+                return False
+            rows = []
+            for t in trades:
+                ctx = t.get('ctx', {})
+                rows.append({
+                    'mom_signal': 0, 'mom_conf': 0,
+                    'mr_signal': 0, 'mr_conf': 0,
+                    'ml_signal': 0, 'ml_conf': 0.3,
+                    'arb_signal': t['arb_signal'], 'arb_conf': t['conf'],
+                    'agreement': t.get('agreement', 1.0),
+                    'votes_up': 1 if t['arb_signal'] > 0 else 0,
+                    'votes_dn': 1 if t['arb_signal'] < 0 else 0,
+                    'conf_avg': t['conf'] / 4,
+                    'atr_pct': ctx.get('atr_pct', 0),
+                    'vol_ratio': ctx.get('vol_ratio', 1),
+                    'rsi': ctx.get('rsi', 50),
+                    'adx': ctx.get('adx', 0),
+                    'hour': ctx.get('hour', 12),
+                    'dow': ctx.get('dow', 2),
+                    'outcome': t['outcome'],
+                })
+            df = pd.DataFrame(rows)
+            X = df.drop('outcome', axis=1)
+            y = df['outcome'].astype(int)
+            n = len(X)
+            split = int(n * 0.8)
+            self.model = xgb.XGBClassifier(
+                n_estimators=300, max_depth=4, learning_rate=0.04,
+                subsample=0.8, colsample_bytree=0.8,
+                use_label_encoder=False, eval_metric='mlogloss',
+                random_state=42
+            )
+            self.model.fit(X.iloc[:split], y.iloc[:split],
+                           eval_set=[(X.iloc[split:], y.iloc[split:])],
+                           verbose=False)
+            self.trained = True
+            self._save()
+            log.info(f"ML model trained from {n} backtest trades. Model saved.")
+            return True
+        except Exception as e:
+            log.error(f"train_from_backtest error: {e}", exc_info=True)
             return False
 
 META = MetaLearner()
