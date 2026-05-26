@@ -1,5 +1,6 @@
 """
 Backtest Engine — παράγει historical trades από OKX public OHLCV για ML training
+Ξεχωριστά signals για momentum, mean_rev, arb — ανεξάρτητο backtest καθεμιάς
 """
 import ccxt, pandas as pd, numpy as np
 import json, os, logging, time, traceback
@@ -8,54 +9,17 @@ from datetime import datetime, timedelta
 log = logging.getLogger(__name__)
 
 SYMBOLS = [
-    'BTC/USDT', 'ETH/USDT', 'SOL/USDT',
-    'BNB/USDT', 'ADA/USDT', 'ATOM/USDT',
+    'BTC/USDT','ETH/USDT','SOL/USDT',
+    'BNB/USDT','ADA/USDT','ATOM/USDT',
 ]
 TIMEFRAME  = '5m'
 DAYS_BACK  = 180
 LEVERAGE   = 2
-
-# ── Signal generation (RSI + Bollinger Bands, backtestable from OHLCV) ─────────
-
-def generate_signal(df, i):
-    """RSI + Bollinger Bands — δουλεύει αποκλειστικά από OHLCV history."""
-    if i < 50:
-        return 0, 0.0
-
-    close = df['close']
-
-    delta = close.diff()
-    gain  = delta.clip(lower=0).rolling(14).mean()
-    loss  = (-delta.clip(upper=0)).rolling(14).mean()
-    rsi_val = loss.iloc[i]
-    if rsi_val == 0:
-        return 0, 0.0
-    rsi = 100 - 100 / (1 + gain.iloc[i] / rsi_val)
-
-    window = close.iloc[i-20:i+1]
-    sma = window.mean()
-    std = window.std()
-    lower_band = sma - 2 * std
-    upper_band = sma + 2 * std
-    price = close.iloc[i]
-
-    ema20 = close.iloc[i-20:i+1].ewm(span=20).mean().iloc[-1]
-    ema50 = close.iloc[i-50:i+1].ewm(span=50).mean().iloc[-1]
-
-    if rsi < 32 and price <= lower_band * 1.005:
-        conf = min(0.92, 0.65 + (32 - rsi) / 100)
-        return 1, round(conf, 3)
-
-    if rsi > 68 and price >= upper_band * 0.995:
-        conf = min(0.92, 0.65 + (rsi - 68) / 100)
-        return -1, round(conf, 3)
-
-    return 0, 0.0
+MIN_CONF   = 0.68
 
 # ── Data fetching ─────────────────────────────────────────────────────────────
 
 def fetch_history(symbol, days=180):
-    """Κατεβάζει OHLCV από real OKX (public, χωρίς API key)."""
     ex   = ccxt.okx({'enableRateLimit': True})
     sym  = symbol
     since = int((datetime.utcnow() - timedelta(days=days)).timestamp() * 1000)
@@ -84,35 +48,66 @@ def fetch_history(symbol, days=180):
     df = df.drop_duplicates('ts').sort_values('ts')
     return df.set_index('ts')
 
-# ── Market context ────────────────────────────────────────────────────────────
+# ── Feature extraction ────────────────────────────────────────────────────────
 
-def market_context(df, i):
-    c = df['close'].iloc[:i+1]
-    h = df['high'].iloc[:i+1]
-    l = df['low'].iloc[:i+1]
-    v = df['volume'].iloc[:i+1]
-    delta = c.diff()
+def compute_features(df, i):
+    if i < 200:
+        return {}
+    close  = df['close']
+    volume = df['volume']
+    high   = df['high']
+    low    = df['low']
+
+    # RSI 14
+    delta = close.diff()
     gain  = delta.clip(lower=0).rolling(14).mean()
     loss  = (-delta.clip(upper=0)).rolling(14).mean()
-    rsi = float((100 - 100/(1+gain/(loss+1e-10))).iloc[-1])
-    hi = df['high'].iloc[:i+1]
-    lo = df['low'].iloc[:i+1]
-    tr = pd.concat([hi-lo, (hi-c.shift()).abs(), (lo-c.shift()).abs()], axis=1).max(axis=1)
-    atr = float(tr.rolling(14).mean().iloc[-1]) / float(c.iloc[-1])
-    vr  = float(v.iloc[-1] / (v.rolling(20).mean().iloc[-1] + 1e-10))
-    dm_p  = hi.diff().clip(lower=0)
-    dm_n  = (-lo.diff().clip(upper=0))
-    atr14 = tr.rolling(14).mean()
-    di_p  = float((dm_p.rolling(14).mean()/(atr14+1e-10)*100).iloc[-1])
-    di_n  = float((dm_n.rolling(14).mean()/(atr14+1e-10)*100).iloc[-1])
-    adx   = abs(di_p-di_n)/(di_p+di_n+1e-10)*100
+    rs    = gain / (loss + 1e-10)
+    rsi   = float(100 - 100 / (1 + rs.iloc[i]))
+
+    # Bollinger Bands position (0..1: bottom..top)
+    sma20  = close.iloc[i-20:i+1].mean()
+    std20  = close.iloc[i-20:i+1].std()
+    bb_pos = float((close.iloc[i] - (sma20 - 2*std20)) / (4 * std20 + 1e-9))
+    bb_pos = max(0.0, min(1.0, bb_pos))
+
+    # ATR %
+    tr     = pd.concat([
+        high.iloc[:i+1] - low.iloc[:i+1],
+        (high.iloc[:i+1] - close.shift().iloc[:i+1]).abs(),
+        (low.iloc[:i+1]  - close.shift().iloc[:i+1]).abs(),
+    ], axis=1).max(axis=1)
+    atr_val  = float(tr.rolling(14).mean().iloc[i])
+    atr_pct  = atr_val / float(close.iloc[i])
+
+    # Volume ratio
+    vol_ratio = float(volume.iloc[i] / (volume.iloc[i-20:i].mean() + 1e-9))
+
+    # Trend
+    ema20  = close.ewm(span=20).mean().iloc[i]
+    ema50  = close.ewm(span=50).mean().iloc[i]
+    ema200 = close.ewm(span=200).mean().iloc[i]
+    c = float(close.iloc[i])
+
+    if c > ema50 > ema200:
+        trend_bull, trend_bear = 1, 0
+    elif c < ema50 < ema200:
+        trend_bull, trend_bear = 0, 1
+    else:
+        trend_bull, trend_bear = 0, 0
+
+    ts = df.index[i]
     return {
-        'atr_pct':   atr,
-        'vol_ratio': vr,
-        'rsi':       rsi,
-        'adx':       adx,
-        'hour':      df.index[i].hour,
-        'dow':       df.index[i].weekday(),
+        'rsi':            round(rsi, 2),
+        'bb_pos':         round(bb_pos, 4),
+        'atr':            round(atr_pct, 6),
+        'vol_ratio':      round(vol_ratio, 3),
+        'hour':           ts.hour,
+        'weekday':        ts.weekday(),
+        'trend_bull':     trend_bull,
+        'trend_bear':     trend_bear,
+        'price_vs_ema20': round((c - ema20) / ema20, 6),
+        'price_vs_ema50': round((c - ema50) / ema50, 6),
     }
 
 # ── Trade simulation ──────────────────────────────────────────────────────────
@@ -133,106 +128,228 @@ def simulate_trade(df, i, side_str, lev=2, sl_pct=0.015, tp_pct=0.025, max_candl
         high = float(df['high'].iloc[idx])
         if side_str == 'LONG':
             if low <= sl:
-                return 0, (sl - entry) / entry * lev
+                return 'STOP_LOSS', (sl - entry) / entry * lev
             if high >= tp:
-                return 2, (tp - entry) / entry * lev
+                return 'TAKE_PROFIT', (tp - entry) / entry * lev
         else:
             if high >= sl:
-                return 0, (entry - sl) / entry * lev
+                return 'STOP_LOSS', (entry - sl) / entry * lev
             if low <= tp:
-                return 2, (entry - tp) / entry * lev
+                return 'TAKE_PROFIT', (entry - tp) / entry * lev
     last = float(df['close'].iloc[min(i+max_candles, len(df)-1)])
     raw  = (last - entry) / entry if side_str == 'LONG' else (entry - last) / entry
-    return 1, raw * lev
+    return 'TIMEOUT', raw * lev
+
+# ── Strategy signals ──────────────────────────────────────────────────────────
+
+def momentum_signal(df, i):
+    """
+    EMA crossover + volume confirmation
+    LONG:  ema10 > ema30 > ema50 + vol spike
+    SHORT: ema10 < ema30 < ema50 + vol spike
+    """
+    if i < 50:
+        return 0, 0.0
+    close  = df['close']
+    volume = df['volume']
+
+    ema10 = close.ewm(span=10).mean().iloc[i]
+    ema30 = close.ewm(span=30).mean().iloc[i]
+    ema50 = close.ewm(span=50).mean().iloc[i]
+
+    vol_ratio = volume.iloc[i] / (volume.iloc[i-20:i].mean() + 1e-9)
+
+    if ema10 > ema30 > ema50 and vol_ratio > 1.3:
+        conf = min(0.92, 0.65 + (ema10 - ema30) / ema30 * 10)
+        return 1, round(conf, 3)
+
+    if ema10 < ema30 < ema50 and vol_ratio > 1.3:
+        conf = min(0.92, 0.65 + (ema30 - ema10) / ema30 * 10)
+        return -1, round(conf, 3)
+
+    return 0, 0.0
+
+def mean_reversion_signal(df, i):
+    """
+    Z-score + RSI confirmation
+    LONG:  z < -2.0 AND RSI < 35 (oversold bounce)
+    SHORT: z >  2.0 AND RSI > 65 (overbought rejection)
+    """
+    if i < 50:
+        return 0, 0.0
+    close = df['close']
+    window = close.iloc[i-30:i+1]
+    mean  = window.mean()
+    std   = window.std()
+    price = close.iloc[i]
+    if std == 0:
+        return 0, 0.0
+    zscore = (price - mean) / std
+
+    delta  = close.diff()
+    gain   = delta.clip(lower=0).rolling(14).mean()
+    loss   = (-delta.clip(upper=0)).rolling(14).mean()
+    loss_val = loss.iloc[i]
+    if loss_val == 0:
+        return 0, 0.0
+    rsi = 100 - 100 / (1 + gain.iloc[i] / loss_val)
+
+    if zscore < -2.0 and rsi < 35:
+        conf = min(0.92, 0.65 + abs(zscore) * 0.08)
+        return 1, round(conf, 3)
+
+    if zscore > 2.0 and rsi > 65:
+        conf = min(0.92, 0.65 + abs(zscore) * 0.08)
+        return -1, round(conf, 3)
+
+    return 0, 0.0
+
+def arbitrage_signal(df, i):
+    """
+    Proxy arb: VWAP spread + volume imbalance
+    LONG:  price below VWAP + buying pressure
+    SHORT: price above VWAP + selling pressure
+    """
+    if i < 30:
+        return 0, 0.0
+    close  = df['close']
+    high   = df['high']
+    low    = df['low']
+    volume = df['volume']
+
+    typical = (high + low + close) / 3
+    vwap = (typical.iloc[i-20:i+1] * volume.iloc[i-20:i+1]).sum() / (volume.iloc[i-20:i+1].sum() + 1e-9)
+
+    price = close.iloc[i]
+    spread_pct = (price - vwap) / vwap
+
+    recent   = df.iloc[i-10:i+1]
+    up_vol   = recent[recent['close'] >= recent['open']]['volume'].sum()
+    down_vol = recent[recent['close'] <  recent['open']]['volume'].sum()
+    total_vol = up_vol + down_vol + 1e-9
+    imbalance = (up_vol - down_vol) / total_vol
+
+    if spread_pct < -0.003 and imbalance > 0.3:
+        conf = min(0.92, 0.65 + abs(spread_pct) * 20)
+        return 1, round(conf, 3)
+
+    if spread_pct > 0.003 and imbalance < -0.3:
+        conf = min(0.92, 0.65 + abs(spread_pct) * 20)
+        return -1, round(conf, 3)
+
+    return 0, 0.0
+
+# ── Strategy registry ─────────────────────────────────────────────────────────
+
+STRATEGIES_BACKTEST = {
+    'momentum': momentum_signal,
+    'mean_rev': mean_reversion_signal,
+    'arb':      arbitrage_signal,
+}
 
 # ── Main backtest ─────────────────────────────────────────────────────────────
 
 def run_backtest():
     all_trades = []
 
-    for symbol in SYMBOLS:
-        log.info(f"Fetching {symbol} ({DAYS_BACK}d {TIMEFRAME})...")
-        try:
-            df = fetch_history(symbol, DAYS_BACK)
-            log.info(f"  {len(df)} candles")
-        except Exception as e:
-            log.warning(f"  SKIP {symbol}: {e}")
-            continue
+    for strategy_name, signal_fn in STRATEGIES_BACKTEST.items():
+        strategy_trades = []
+        log.info(f"\n=== Backtesting strategy: {strategy_name} ===")
 
-        i = 50
-        symbol_trades = 0
-
-        while i < len(df) - 50:
+        for symbol in SYMBOLS:
+            log.info(f"  {symbol}...")
             try:
-                signal, conf = generate_signal(df, i)
+                df = fetch_history(symbol, DAYS_BACK)
             except Exception as e:
-                log.warning(f"  signal error at {i}: {e}")
-                i += 1
+                log.warning(f"  SKIP {symbol}: {e}")
                 continue
 
-            if signal == 0 or conf < 0.68:
-                i += 1
-                continue
+            i = 50
+            while i < len(df) - 50:
+                try:
+                    signal, conf = signal_fn(df, i)
+                except Exception:
+                    i += 1
+                    continue
 
-            trade_side = 'LONG' if signal == 1 else 'SHORT'
-            try:
-                outcome, pnl = simulate_trade(df, i, trade_side, LEVERAGE,
-                                               sl_pct=0.015, tp_pct=0.025,
-                                               max_candles=144)
-            except Exception as e:
-                log.warning(f"  simulate error at {i}: {e}")
-                i += 1
-                continue
+                if signal == 0 or conf < MIN_CONF:
+                    i += 1
+                    continue
 
-            ctx = market_context(df, i)
-            all_trades.append({
-                'symbol':     symbol,
-                'side':       trade_side,
-                'entry_price': float(df['close'].iloc[i]),
-                'entry_time': str(df.index[i]),
-                'outcome':    outcome,
-                'pnl_pct':    round(pnl, 6),
-                'conf':       round(conf, 4),
-                'arb_signal': signal,
-                'arb_conf':   round(conf, 4),
-                'agreement':  1.0,
-                'ctx':        ctx,
-                'mom_signal': 0, 'mom_conf': 0,
-                'mr_signal':  0, 'mr_conf': 0,
-                'ml_signal':  0, 'ml_conf': 0.3,
-            })
-            symbol_trades += 1
-            i += 24
+                trade_side = 'LONG' if signal == 1 else 'SHORT'
+                try:
+                    status, pnl = simulate_trade(df, i, trade_side,
+                                                  lev=LEVERAGE,
+                                                  sl_pct=0.015,
+                                                  tp_pct=0.025,
+                                                  max_candles=144)
+                except Exception:
+                    i += 1
+                    continue
 
-        log.info(f"  {symbol}: {symbol_trades} trades")
+                features = compute_features(df, i)
+
+                trade = {
+                    'strategy':    strategy_name,
+                    'symbol':      symbol,
+                    'side':        trade_side,
+                    'entry_price': float(df['close'].iloc[i]),
+                    'entry_time':  str(df.index[i]),
+                    'status':      status,
+                    'pnl_pct':     round(pnl, 6),
+                    'conf':        round(conf, 4),
+                    'features':    features,
+                    'label':       1 if status == 'TAKE_PROFIT' else 0,
+                }
+                strategy_trades.append(trade)
+                all_trades.append(trade)
+                i += 24
+
+        wins  = sum(1 for t in strategy_trades if t['label'] == 1)
+        total = len(strategy_trades)
+        if total > 0:
+            log.info(f"  → {total} trades, win rate: {wins/total*100:.1f}%")
+        else:
+            log.info(f"  → 0 trades generated")
 
     os.makedirs('data', exist_ok=True)
     with open('data/backtest_trades.json', 'w') as f:
         json.dump(all_trades, f, indent=2)
 
     total = len(all_trades)
-    wins  = sum(1 for t in all_trades if t['outcome'] == 2)
-    losses = sum(1 for t in all_trades if t['outcome'] == 0)
-
+    wins  = sum(1 for t in all_trades if t['label'] == 1)
     log.info(f"\n=== Backtest complete ===")
     log.info(f"Total trades: {total}")
     if total > 0:
-        log.info(f"Win rate: {wins/total*100:.1f}%  ({wins}W/{losses}L)")
+        log.info(f"Win rate: {wins/total*100:.1f}%  ({wins}W/{total-wins}L)")
+        by_strat = {}
+        for t in all_trades:
+            s = t['strategy']
+            by_strat.setdefault(s, {'total':0,'wins':0})
+            by_strat[s]['total'] += 1
+            by_strat[s]['wins']  += t['label']
+        for s, v in by_strat.items():
+            wr = v['wins']/v['total']*100 if v['total'] else 0
+            log.info(f"  {s}: {v['total']} trades ({v['wins']}W, {wr:.1f}%)")
         by_symbol = {}
         for t in all_trades:
             by_symbol[t['symbol']] = by_symbol.get(t['symbol'], 0) + 1
         for sym, cnt in sorted(by_symbol.items()):
-            sym_wins = sum(1 for t in all_trades if t['symbol']==sym and t['outcome']==2)
+            sym_wins = sum(1 for t in all_trades if t['symbol']==sym and t['label']==1)
             log.info(f"  {sym}: {cnt} trades ({sym_wins}W)")
 
     if total >= 50:
-        log.info("Training ML model from backtest...")
+        log.info("Training per-strategy ML models from backtest...")
         try:
-            from meta_learner import META
-            ok = META.train_from_backtest('data/backtest_trades.json')
-            if ok:
-                from notifier import send
-                send(f"🧠 ML model trained from {total} backtest trades! WR: {wins/total*100:.1f}%")
+            from meta_learner import train_from_backtest as train_fn
+            results = train_fn('data/backtest_trades.json')
+            log.info(f"Training results: {results}")
+            from notifier import send
+            summary = " | ".join(
+                f"{s}:{v['trades']}t {v['win_rate']}%"
+                for s,v in (results or {}).items()
+            )
+            send(f"🧠 Per-strategy ML models trained!\n{summary}")
         except Exception as e:
             log.error(f"ML training failed: {e}", exc_info=True)
 

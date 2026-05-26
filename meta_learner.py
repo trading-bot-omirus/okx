@@ -5,10 +5,132 @@ Meta-Learner: συνδυάζει signals από 4 strategies + market context
 import numpy as np, pandas as pd, joblib, logging, os, json
 from datetime import datetime
 import xgboost as xgb
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from sklearn.utils.class_weight import compute_class_weight
 from sklearn.preprocessing import LabelEncoder
 from config import MODEL_PATH
 
 log = logging.getLogger(__name__)
+
+# ── Per-strategy ML (Phase 13) ────────────────────────────────────────────────
+
+FEATURE_KEYS = [
+    'rsi','bb_pos','atr','vol_ratio',
+    'hour','weekday','trend_bull','trend_bear',
+    'price_vs_ema20','price_vs_ema50'
+]
+
+def train_from_backtest(trades_path='data/backtest_trades.json'):
+    """
+    Εκπαιδεύει ξεχωριστό GradientBoostingClassifier για κάθε strategy.
+    Αποθηκεύει models/ml_{strategy}.pkl.
+    """
+    if not os.path.exists(trades_path):
+        log.warning(f"Backtest file not found: {trades_path}")
+        return None
+
+    with open(trades_path) as f:
+        all_trades = json.load(f)
+
+    if len(all_trades) < 30:
+        log.info(f"Not enough trades ({len(all_trades)}). Need 30+")
+        return None
+
+    os.makedirs('models', exist_ok=True)
+    results = {}
+
+    for strat in ['momentum','mean_rev','arb']:
+        trades = [t for t in all_trades if t.get('strategy') == strat]
+        if len(trades) < 30:
+            log.info(f"  {strat}: insufficient data ({len(trades)}) — skip")
+            results[strat] = {'trades': len(trades), 'win_rate': 0.0, 'error': 'insufficient'}
+            continue
+
+        X = np.array([
+            [t.get('features', {}).get(k, 0) for k in FEATURE_KEYS]
+            for t in trades
+        ], dtype=np.float64)
+        y = np.array([t.get('label', 0) for t in trades])
+
+        if len(np.unique(y)) < 2:
+            log.info(f"  {strat}: only 1 class ({np.unique(y)[0]}) — skip")
+            results[strat] = {'trades': len(trades), 'win_rate': round(float(y.sum()/len(y))*100, 1), 'error': 'single_class'}
+            continue
+
+        classes = np.unique(y)
+        weights = compute_class_weight('balanced', classes=classes, y=y)
+        cw = dict(zip(classes, weights))
+
+        X_tr, X_te, y_tr, y_te = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y)
+
+        model = GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        )
+        model.fit(X_tr, y_tr)
+
+        report = classification_report(y_te, model.predict(X_te), output_dict=True, zero_division=0)
+        log.info(f"\n{strat.upper()} model:")
+        log.info(f"  Accuracy: {report.get('accuracy', 0):.3f}")
+        log.info(f"  Precision: {report.get('macro avg', {}).get('precision', 0):.3f}")
+        log.info(f"  Recall: {report.get('macro avg', {}).get('recall', 0):.3f}")
+
+        path = f'models/ml_{strat}.pkl'
+        joblib.dump({
+            'model': model,
+            'feature_keys': FEATURE_KEYS,
+            'strategy': strat,
+            'n_samples': len(trades),
+        }, path)
+        log.info(f"  Saved: {path}")
+
+        wins = int(y.sum())
+        results[strat] = {
+            'trades':   len(trades),
+            'win_rate': round(wins / len(trades) * 100, 1),
+        }
+
+    summary_path = 'models/training_summary.json'
+    with open(summary_path, 'w') as f:
+        json.dump(results, f, indent=2)
+    log.info(f"Training summary saved: {summary_path}")
+
+    return results
+
+
+def predict_for_strategy(strategy_name: str, features_dict: dict) -> tuple[float, float]:
+    """
+    Επιστρέφει (signal, confidence) για τη συγκεκριμένη strategy.
+    signal: 1.0 = LONG, -1.0 = SHORT, 0.0 = HOLD
+    confidence: 0..1
+    Fallback: (0.0, 0.3) όταν δεν υπάρχει μοντέλο.
+    """
+    path = f'models/ml_{strategy_name}.pkl'
+    if not os.path.exists(path):
+        return 0.0, 0.3
+
+    try:
+        data = joblib.load(path)
+        model = data['model']
+        keys = data['feature_keys']
+        X = np.array([[features_dict.get(k, 0) for k in keys]], dtype=np.float64)
+        prob = float(model.predict_proba(X)[0][1])
+
+        if prob > 0.65:
+            return 1.0, prob
+        elif prob < 0.35:
+            return -1.0, 1 - prob
+        else:
+            return 0.0, 0.5
+    except Exception as e:
+        log.warning(f"predict_for_strategy({strategy_name}) error: {e}")
+        return 0.0, 0.3
 
 class MetaLearner:
     def __init__(self):

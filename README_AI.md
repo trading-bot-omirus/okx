@@ -205,3 +205,46 @@ POST /api/backtest/run
 - **Loop timing**: Το bot ελέγχει stop losses κάθε 60 δευτ. αλλά κάνει full scan κάθε 300 δευτ. Αν θες συχνότερο scan, μείωσε το full_cycle_interval.
 - **Disabled strategies**: Momentum και Mean Reversion είναι απενεργοποιημένες από default. Μόνο το Arbitrage είναι ενεργό. Μπορείς να τις ενεργοποιήσεις από Settings → Strategies.
 - **Trailing stop**: Αποθηκεύει peak_price στη DB κάθε 60 δευτ. Αν η τιμή γυρίσει 2.5% από το υψηλότερο σημείο, κλείνει η θέση με status TRAILING_STOP.
+
+---
+
+## Phase 13 — Per‑strategy ML models
+
+Each strategy now has its own ML model trained from historical backtest:
+
+| Model | Backtest source | Purpose |
+|---|---|---|
+| `models/ml_momentum.pkl` | EMA crossover + volume | Filters momentum trades |
+| `models/ml_mean_rev.pkl` | Z-score + RSI | Filters mean reversion trades |
+| `models/ml_arb.pkl` | VWAP spread + imbalance | Filters arbitrage trades |
+
+**How it works:**
+1. `backtest.py` runs 3 independent backtests (one per strategy), generating trades with `strategy` + `features` + `label` fields
+2. `meta_learner.train_from_backtest()` trains a separate `GradientBoostingClassifier` per strategy
+3. `meta_learner.predict_for_strategy(name, features)` returns `(signal, confidence)` per strategy
+4. Integration into live loop: each strategy's raw signal is filtered by its ML model before combining
+
+**Key differences from old (Phase 12) single-model approach:**
+- Old: single XGBoost model `meta_learner.pkl` tried to learn all 4 strategies at once
+- New: each strategy has its own `GradientBoostingClassifier` specializing in that strategy's win/loss patterns
+- Old: ML signal was always 0.30 neutral (no real predictions)
+- New: each strategy can be independently approved/rejected by its ML model
+
+**Backtest signals:**
+- **Momentum**: EMA10/30/50 crossover + volume spike >1.3x
+- **Mean reversion**: Z-score ±2.0 + RSI <35/>65
+- **Arbitrage**: Price vs VWAP spread >0.3% + volume imbalance >0.3
+
+**API changes:**
+- `/api/backtest/status` now returns `by_strategy` breakdown and `models_trained` count
+- `models/training_summary.json` stores per-strategy results
+
+**Usage:**
+- `POST /api/backtest/run?api_key=...` triggers backtest + per-strategy training
+- `GET /api/backtest/status?api_key=...` shows strategy breakdown
+- `ml_strategy.compute()` still loads combined model; per-strategy models used live via `predict_for_strategy()`
+
+**File changes:**
+- `backtest.py`: Complete rewrite — 3 signal functions, strategy loop, `compute_features()`
+- `meta_learner.py`: Added `train_from_backtest()`, `predict_for_strategy()`, `FEATURE_KEYS`
+- `api.py`: `by_strategy` in status endpoint, `models_trained` count

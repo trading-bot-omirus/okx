@@ -315,7 +315,8 @@ def run_backtest():
 def backtest_status():
     import os, json as _json
     path      = 'data/backtest_trades.json'
-    model_path = 'models/meta_learner.pkl'
+    model_paths = ['models/ml_momentum.pkl','models/ml_mean_rev.pkl','models/ml_arb.pkl']
+    summary_path = 'models/training_summary.json'
     if not os.path.exists(path):
         return jsonify({'status': 'not_run',
                         'message': 'Δεν έχει τρέξει ακόμα backtest'})
@@ -328,22 +329,48 @@ def backtest_status():
     if total == 0:
         return jsonify({'status': 'insufficient', 'total_trades': 0,
                         'hint': 'backtest generated no signals — check logs'})
-    wins    = sum(1 for t in trades if t['outcome'] == 2)
-    losses  = sum(1 for t in trades if t['outcome'] == 0)
-    neutral = sum(1 for t in trades if t['outcome'] == 1)
+    wins    = sum(1 for t in trades if t.get('label', 0) == 1)
+    losses  = sum(1 for t in trades if t.get('label', 0) == 0)
     by_symbol = {}
+    by_strategy = {}
     for t in trades:
         s = t['symbol']
         by_symbol[s] = by_symbol.get(s, 0) + 1
+        strat = t.get('strategy', 'unknown')
+        if strat not in by_strategy:
+            by_strategy[strat] = {'total': 0, 'wins': 0}
+        by_strategy[strat]['total'] += 1
+        by_strategy[strat]['wins']  += t.get('label', 0)
+
+    by_strategy_breakdown = {
+        s: {
+            'trades':   v['total'],
+            'wins':     v['wins'],
+            'win_rate': round(v['wins']/v['total']*100, 1) if v['total'] else 0,
+        }
+        for s, v in by_strategy.items()
+    }
+
+    models_trained = sum(1 for p in model_paths if os.path.exists(p))
+    training_summary = {}
+    if os.path.exists(summary_path):
+        try:
+            with open(summary_path) as f:
+                training_summary = _json.load(f)
+        except:
+            pass
+
     return jsonify({
-        'status':       'complete' if total >= 50 else 'insufficient',
-        'total_trades': total,
-        'wins':         wins,
-        'losses':       losses,
-        'neutral':      neutral,
-        'win_rate':     round(wins / total * 100, 1) if total else 0,
-        'by_symbol':    by_symbol,
-        'model_trained': os.path.exists(model_path),
+        'status':          'complete' if total >= 50 else 'insufficient',
+        'total_trades':    total,
+        'wins':            wins,
+        'losses':          losses,
+        'win_rate':        round(wins / total * 100, 1) if total else 0,
+        'by_symbol':       by_symbol,
+        'by_strategy':     by_strategy_breakdown,
+        'models_trained':  models_trained,
+        'models_expected': 3,
+        'training_summary': training_summary,
     })
 
 if __name__ == '__main__':
