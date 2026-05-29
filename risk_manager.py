@@ -29,7 +29,9 @@ def check_trailing_stop(trade: dict, current_price: float) -> bool:
     if not TRAILING_STOP_ENABLED:
         return False
     side = trade['side']
-    peak = trade.get('peak_price', trade['entry_price'])
+    peak = trade.get('peak_price')
+    if peak is None:
+        peak = trade['entry_price']
     if side == 'LONG':
         if current_price > peak:
             peak = current_price
