@@ -16,8 +16,7 @@ from notifier import send
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 os.makedirs("logs", exist_ok=True)
-os.makedirs("data", exist_ok=True)
-os.makedirs("models", exist_ok=True)
+os.makedirs("data/models", exist_ok=True)
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(

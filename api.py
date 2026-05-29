@@ -315,8 +315,8 @@ def run_backtest():
 def backtest_status():
     import os, json as _json
     path      = 'data/backtest_trades.json'
-    model_paths = ['models/ml_momentum.pkl','models/ml_mean_rev.pkl','models/ml_arb.pkl']
-    summary_path = 'models/training_summary.json'
+    model_paths = ['data/models/ml_momentum.pkl','data/models/ml_mean_rev.pkl','data/models/ml_arb.pkl']
+    summary_path = 'data/models/training_summary.json'
     if not os.path.exists(path):
         return jsonify({'status': 'not_run',
                         'message': 'Δεν έχει τρέξει ακόμα backtest'})

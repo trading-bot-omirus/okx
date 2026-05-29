@@ -25,7 +25,7 @@ FEATURE_KEYS = [
 def train_from_backtest(trades_path='data/backtest_trades.json'):
     """
     Εκπαιδεύει ξεχωριστό GradientBoostingClassifier για κάθε strategy.
-    Αποθηκεύει models/ml_{strategy}.pkl.
+    Αποθηκεύει data/models/ml_{strategy}.pkl.
     """
     if not os.path.exists(trades_path):
         log.warning(f"Backtest file not found: {trades_path}")
@@ -38,7 +38,7 @@ def train_from_backtest(trades_path='data/backtest_trades.json'):
         log.info(f"Not enough trades ({len(all_trades)}). Need 30+")
         return None
 
-    os.makedirs('models', exist_ok=True)
+    os.makedirs('data/models', exist_ok=True)
     results = {}
 
     for strat in ['momentum','mean_rev','arb']:
@@ -81,7 +81,7 @@ def train_from_backtest(trades_path='data/backtest_trades.json'):
         log.info(f"  Precision: {report.get('macro avg', {}).get('precision', 0):.3f}")
         log.info(f"  Recall: {report.get('macro avg', {}).get('recall', 0):.3f}")
 
-        path = f'models/ml_{strat}.pkl'
+        path = f'data/models/ml_{strat}.pkl'
         joblib.dump({
             'model': model,
             'feature_keys': FEATURE_KEYS,
@@ -96,7 +96,7 @@ def train_from_backtest(trades_path='data/backtest_trades.json'):
             'win_rate': round(wins / len(trades) * 100, 1),
         }
 
-    summary_path = 'models/training_summary.json'
+    summary_path = 'data/models/training_summary.json'
     with open(summary_path, 'w') as f:
         json.dump(results, f, indent=2)
     log.info(f"Training summary saved: {summary_path}")
@@ -111,7 +111,7 @@ def predict_for_strategy(strategy_name: str, features_dict: dict) -> tuple[float
     confidence: 0..1
     Fallback: (0.0, 0.3) όταν δεν υπάρχει μοντέλο.
     """
-    path = f'models/ml_{strategy_name}.pkl'
+    path = f'data/models/ml_{strategy_name}.pkl'
     if not os.path.exists(path):
         return 0.0, 0.3
 

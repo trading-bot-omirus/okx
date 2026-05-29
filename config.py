@@ -22,7 +22,7 @@ LOG_LEVEL = "INFO"
 # ── Defaults (override από Dashboard Settings) ────────────────────────────────
 DEFAULT_SYMBOLS     = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "OKB/USDT"]
 LOOKBACK_BARS       = 500
-MODEL_PATH          = "models/meta_learner.pkl"
+MODEL_PATH          = "data/models/meta_learner.pkl"
 RETRAIN_EVERY_HOURS = 24
 
 def get_live_config():
